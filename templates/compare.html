@@ -1,0 +1,113 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Comparing {{ folders|length }} folder{{ 's' if folders|length != 1 else '' }}</title>
+<link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+<header>
+  <h1>Comparing {{ folders|length }} folder{{ 's' if folders|length != 1 else '' }}</h1>
+  <p><a href="/" style="color: var(--accent); text-decoration: none;">&larr; back to picker</a></p>
+</header>
+<main>
+  <div class="compare-toolbar">
+    <button id="sync-play" class="secondary">Play all</button>
+    <button id="sync-pause" class="secondary">Pause all</button>
+    <button id="sync-restart" class="secondary">Restart all</button>
+    <div class="share-box">
+      <input type="text" id="share-url" value="{{ share_url }}" readonly>
+      <button id="copy-btn" class="secondary">Copy link</button>
+    </div>
+  </div>
+
+  <div class="table-wrap">
+    <table class="compare-table">
+      <thead>
+        <tr>
+          {% for f in folders %}
+          <th>{{ f.name }}</th>
+          {% endfor %}
+        </tr>
+      </thead>
+      <tbody>
+        {% for i in max_videos %}
+        <tr>
+          {% for f in folders %}
+          <td>
+            {% if i < f.videos|length %}
+            <div class="video-card">
+              <video class="synced" preload="metadata" controls muted playsinline>
+                <source src="{{ url_for('media', folder=f.name, filename=f.videos[i]) }}">
+                Your browser doesn't support video playback.
+              </video>
+              <div class="caption">{{ f.videos[i] }}</div>
+            </div>
+            {% endif %}
+          </td>
+          {% endfor %}
+        </tr>
+        {% endfor %}
+        <tr class="stats-row">
+          {% for f in folders %}
+          <td>
+            {% if f.stats %}
+            <dl class="stats">
+              {% for label, value in f.stats %}
+              <dt>{{ label }}</dt>
+              <dd>{{ value }}</dd>
+              {% endfor %}
+            </dl>
+            {% else %}
+            <span class="muted-note">no stats CSV</span>
+            {% endif %}
+          </td>
+          {% endfor %}
+        </tr>
+      </tbody>
+    </table>
+  </div>
+</main>
+<div class="toast" id="toast">Link copied</div>
+
+<script>
+  const vids = Array.from(document.querySelectorAll('video.synced'));
+
+  document.getElementById('sync-play').addEventListener('click', () => {
+    vids.forEach(v => v.play());
+  });
+  document.getElementById('sync-pause').addEventListener('click', () => {
+    vids.forEach(v => v.pause());
+  });
+  document.getElementById('sync-restart').addEventListener('click', () => {
+    vids.forEach(v => { v.currentTime = 0; });
+  });
+
+  // Keep videos roughly in sync: when one is seeked, jump the others to match.
+  vids.forEach(v => {
+    v.addEventListener('seeked', () => {
+      vids.forEach(other => {
+        if (other !== v && Math.abs(other.currentTime - v.currentTime) > 0.2) {
+          other.currentTime = v.currentTime;
+        }
+      });
+    });
+  });
+
+  const copyBtn = document.getElementById('copy-btn');
+  const toast = document.getElementById('toast');
+  copyBtn.addEventListener('click', async () => {
+    const input = document.getElementById('share-url');
+    try {
+      await navigator.clipboard.writeText(input.value);
+    } catch (e) {
+      input.select();
+      document.execCommand('copy');
+    }
+    toast.classList.add('show');
+    setTimeout(() => toast.classList.remove('show'), 1400);
+  });
+</script>
+</body>
+</html>

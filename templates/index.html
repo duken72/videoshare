@@ -1,0 +1,47 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Video Compare</title>
+<link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+<header>
+  <h1>Video Compare</h1>
+  <p>Serving from <code>{{ video_dir }}</code> — pick run folders, then share the link.</p>
+</header>
+<main>
+  {% if folders %}
+  <form id="picker" action="/compare" method="get">
+    {% for f in folders %}
+    <div class="video-row">
+      <input type="checkbox" name="f" value="{{ f }}" id="cb-{{ loop.index }}">
+      <label for="cb-{{ loop.index }}">{{ f }}</label>
+    </div>
+    {% endfor %}
+    <div class="toolbar">
+      <button type="submit">Compare selected</button>
+      <span id="count" style="color: var(--muted); font-size: 0.88rem;"></span>
+    </div>
+  </form>
+  {% else %}
+  <div class="empty-state">
+    No run folders found yet. Each folder should sit directly inside the configured
+    <code>VIDEO_DIR</code> and contain video files ({{ '.mp4, .webm, .mov, .mkv' }}), plus
+    an optional stats CSV. Add one and reload this page.
+  </div>
+  {% endif %}
+</main>
+<script>
+  const boxes = document.querySelectorAll('input[type="checkbox"]');
+  const count = document.getElementById('count');
+  function update() {
+    const n = document.querySelectorAll('input[type="checkbox"]:checked').length;
+    count.textContent = n ? `${n} selected` : '';
+  }
+  boxes.forEach(b => b.addEventListener('change', update));
+  update();
+</script>
+</body>
+</html>
