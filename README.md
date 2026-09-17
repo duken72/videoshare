@@ -1,8 +1,10 @@
 # videoshare
 
-A tiny `Flask` app: pick subfolders, each corresponds to a test output,
-from a folder on your server, hit **Compare**, and get a shareable link
-that shows them side by side — one column per folder, its videos stacked
+A tiny `Flask` app allowing to access and compare data of test runs on a
+remote server. The data is in specified directory, under which are
+subforders. Each subfolder corresponds to the data of a test run,
+including videos and its stats CSV. Users can pick test runs to compare.
+The app shows them side by side — one column per runs, its videos stacked
 on top and its stats CSV rendered below (with synced play / pause / restart,
 and reasonably in-sync scrubbing).
 
@@ -84,7 +86,7 @@ file, the first one alphabetically is used.
 
 ## Local development setup
 
-After this setup, the web app can be viewed only from the server.
+After this setup, the web app is reachable from your public/LAN IP by default.
 
 ```bash
 python3 app.py
@@ -239,6 +241,10 @@ Once `nginx` is proxying, visit `http://<server-ip>/` (or your domain) — no
 `:5000` needed. You can also remove the `sudo ufw allow 5000/tcp` rule from
 the dev-server step above, since `gunicorn` no longer needs to be reachable
 from outside the server.
+
+Please note that, this allows access from within your local network, not the
+WWW. To share access globally, extra configurations are needed on how your
+local network is exposed to global network.
 
 ## Authentication
 
