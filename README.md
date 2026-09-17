@@ -101,9 +101,23 @@ sudo systemctl enable --now videoshare
 sudo systemctl status videoshare
 ```
 
-This binds gunicorn to `127.0.0.1:5000` (not exposed publicly on its own).
+This binds gunicorn to `127.0.0.1:5000` — reachable only from the server
+itself. That's different from `python3 app.py` above, which listens on
+`0.0.0.0` (every interface) and is why it's reachable from your public/LAN
+IP by default. Once you switch to the service, the same `http://YOUR_SERVER_IP:5000`
+link will stop connecting even though the service is running — that's
+expected, not a bug: gunicorn is meant to sit behind nginx rather than face
+the network directly. Put nginx in front (below) to restore public access,
+or, if you'd rather skip nginx, change `-b 127.0.0.1:5000` to
+`-b 0.0.0.0:5000` in `videoshare.service`'s `ExecStart` (then `daemon-reload`
++ `restart`) — but note `APP_PASSWORD` then travels over plain HTTP, so
+restrict access with a firewall rule if the server is internet-facing.
 
-**nginx reverse proxy** (optional, gives you port 80/443 and a normal-looking URL):
+**nginx reverse proxy** (recommended — gives you port 80/443 and a
+normal-looking URL instead of `:5000`, and keeps gunicorn off the network
+directly):
+
+If you have a domain pointed at the server:
 
 ```nginx
 server {
@@ -123,6 +137,42 @@ server {
 
 Then `sudo systemctl reload nginx`, and optionally get HTTPS with
 `sudo certbot --nginx -d videos.example.com`.
+
+No domain — just serving by IP? Use a catch-all server block instead (no
+HTTPS is possible this way, since Let's Encrypt requires a real domain):
+
+```nginx
+server {
+    listen 80 default_server;
+    server_name _;
+
+    client_max_body_size 0;
+    proxy_read_timeout 3600;
+
+    location / {
+        proxy_pass http://127.0.0.1:5000;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+    }
+}
+```
+
+Save either block as `/etc/nginx/sites-available/videoshare`, then:
+
+```bash
+sudo ln -sf /etc/nginx/sites-available/videoshare /etc/nginx/sites-enabled/videoshare
+sudo rm -f /etc/nginx/sites-enabled/default   # avoid a port-80 conflict
+sudo nginx -t && sudo systemctl reload nginx
+sudo systemctl enable nginx
+sudo ufw allow 80/tcp
+```
+
+Once nginx is proxying, visit `http://<server-ip>/` (or your domain) — no
+`:5000` needed. You can also remove the `sudo ufw allow 5000/tcp` rule from
+the dev-server step above, since gunicorn no longer needs to be reachable
+from outside the server.
 
 ## Authentication
 
