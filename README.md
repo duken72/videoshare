@@ -33,8 +33,9 @@ pip install -r requirements.txt
 
 ## 2. Point it at your run folders
 
-By default it looks for a `videos/` folder next to `app.py`. Either put your
-run folders there, or point `VIDEO_DIR` at wherever they already live:
+By default it looks for a `data/` folder in your home directory (`~/data`).
+Either put your run folders there, or point `VIDEO_DIR` at wherever they
+already live:
 
 ```bash
 export VIDEO_DIR=/path/to/your/runs
@@ -43,8 +44,8 @@ export VIDEO_DIR=/path/to/your/runs
 Each **immediate subfolder** of `VIDEO_DIR` is one selectable "run" — it
 should contain:
 
-- one or more video files (`.mp4 .webm .ogg .mov .m4v .mkv` out of the box —
-  edit `ALLOWED_EXTENSIONS` in `app.py` to add more), and
+- one or more video files (`.mp4 .webm .ogg .mov .m4v .mkv .avi` out of the
+  box — edit `ALLOWED_EXTENSIONS` in `app.py` to add more), and
 - optionally, a `.csv` file with two columns (`label,value` per row) — its
   rows are shown as stats under that folder's videos on the compare page.
 

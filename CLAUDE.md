@@ -24,7 +24,7 @@ python3 app.py
 gunicorn -w 2 -b 0.0.0.0:5000 app:app
 ```
 
-Configure via env vars (see top of `app.py`): `VIDEO_DIR` (default `./videos`),
+Configure via env vars (see top of `app.py`): `VIDEO_DIR` (default `~/data`),
 `HOST` (default `0.0.0.0`), `PORT` (default `5000`), `APP_PASSWORD` (default
 `adas123` — the login password), `SECRET_KEY` (session-cookie signing key).
 

@@ -8,7 +8,7 @@ link that compares them side by side: each folder is a column, with its
 videos stacked on top and its stats.csv rendered below.
 
 Configure with environment variables (or just edit the defaults below):
-    VIDEO_DIR     - absolute path to the folder containing your run folders (default: ./videos)
+    VIDEO_DIR     - absolute path to the folder containing your run folders (default: ~/data)
     HOST          - interface to bind to (default: 0.0.0.0)
     PORT          - port to listen on (default: 5000)
     APP_PASSWORD  - shared password required to log in (default: adas123 - override in production)
@@ -39,8 +39,8 @@ from flask import (
 )
 from werkzeug.utils import secure_filename
 
-VIDEO_DIR = Path(os.environ.get("VIDEO_DIR", Path(__file__).parent / "videos")).resolve()
-ALLOWED_EXTENSIONS = {".mp4", ".webm", ".ogg", ".mov", ".m4v", ".mkv"}
+VIDEO_DIR = Path(os.environ.get("VIDEO_DIR", Path.home() / "data")).resolve()
+ALLOWED_EXTENSIONS = {".mp4", ".webm", ".ogg", ".mov", ".m4v", ".mkv", ".avi"}
 APP_PASSWORD = os.environ.get("APP_PASSWORD", "adas123")
 CONTACT_EMAILS = ["huuduc.nguyen@vinfastauto.com", "huu.lee@vinfastauto.com"]
 
