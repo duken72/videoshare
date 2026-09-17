@@ -6,6 +6,21 @@ that shows them side by side — one column per folder, its videos stacked
 on top and its stats CSV rendered below (with synced play / pause / restart,
 and reasonably in-sync scrubbing).
 
+## Table of Contents
+
+<!-- vim-markdown-toc GFM -->
+
+    * [Files](#files)
+    * [Installation](#installation)
+    * [Point it at your run folders](#point-it-at-your-run-folders)
+    * [Test locally on the server](#test-locally-on-the-server)
+    * [Create a Service (recommended)](#create-a-service-recommended)
+    * [Authentication](#authentication)
+    * [How sharing works](#how-sharing-works)
+* [TODO](#todo)
+
+<!-- vim-markdown-toc -->
+
 ## Files
 
 ```
@@ -19,19 +34,15 @@ videoshare/
 └── videoshare.service  # example systemd unit
 ```
 
-## 1. Copy it to the server and install
+## Installation
 
 ```bash
-scp -r videoshare your-user@your-server:/opt/videoshare
-ssh your-user@your-server
-
-cd /opt/videoshare
 python3 -m venv .venv
-source venv/bin/activate
+source .venv/bin/activate
 pip install -r requirements.txt
 ```
 
-## 2. Point it at your run folders
+## Point it at your run folders
 
 By default it looks for a `data/` folder in your home directory (`~/data`).
 Either put your run folders there, or point `VIDEO_DIR` at wherever they
@@ -41,7 +52,7 @@ already live:
 export VIDEO_DIR=/path/to/your/runs
 ```
 
-Each **immediate subfolder** of `VIDEO_DIR` is one selectable "run" — it
+Each **immediate subfolder** of `VIDEO_DIR` is one selectable "run" / test — it
 should contain:
 
 - one or more video files (`.mp4 .webm .ogg .mov .m4v .mkv` out of the box —
@@ -68,7 +79,7 @@ rows line up meaningfully. Folders can have different numbers of videos;
 missing cells are just left blank. If a folder has more than one `.csv`
 file, the first one alphabetically is used.
 
-## 3. Try it locally on the server
+## Test locally on the server
 
 ```bash
 python3 app.py
@@ -83,9 +94,9 @@ Check a few boxes, click **Compare selected**, and you'll land on a URL like:
 http://YOUR_SERVER_IP:5000/compare?f=run_a&f=run_b
 ```
 
-That URL is what you share — anyone who opens it sees the same comparison.
+If you open the service publicly, it would be visible to anyone who opens it, they sees the same comparison using that URL.
 
-## 4. Run it for real (recommended)
+## Create a Service (recommended)
 
 Don't leave the dev server running long-term. Use gunicorn behind systemd,
 optionally with nginx in front for a clean URL/port and HTTPS.
@@ -208,3 +219,9 @@ folders are blocked), and renders one table column per folder: its videos
 (streamed from `/media/<folder>/<filename>`, which supports HTTP Range
 requests so scrubbing/seeking works normally) stacked in sorted filename
 order, with its stats CSV rendered as a label/value list underneath.
+
+# TODO
+
+- Include tags to filter
+    - perception
+    - motion-planning
