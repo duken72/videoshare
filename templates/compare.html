@@ -7,9 +7,14 @@
 <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
 </head>
 <body>
-<header>
-  <h1>Comparing {{ folders|length }} folder{{ 's' if folders|length != 1 else '' }}</h1>
-  <p><a href="/" style="color: var(--accent); text-decoration: none;">&larr; back to picker</a></p>
+<header class="header-row">
+  <div>
+    <h1>Comparing {{ folders|length }} folder{{ 's' if folders|length != 1 else '' }}</h1>
+    <p><a href="/" style="color: var(--accent); text-decoration: none;">&larr; back to picker</a></p>
+  </div>
+  <form class="logout-form" method="post" action="{{ url_for('logout') }}">
+    <button type="submit" class="secondary">Log out</button>
+  </form>
 </header>
 <main>
   <div class="compare-toolbar">

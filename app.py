@@ -8,9 +8,11 @@ link that compares them side by side: each folder is a column, with its
 videos stacked on top and its stats.csv rendered below.
 
 Configure with environment variables (or just edit the defaults below):
-    VIDEO_DIR   - absolute path to the folder containing your run folders (default: ./videos)
-    HOST        - interface to bind to (default: 0.0.0.0)
-    PORT        - port to listen on (default: 5000)
+    VIDEO_DIR     - absolute path to the folder containing your run folders (default: ./videos)
+    HOST          - interface to bind to (default: 0.0.0.0)
+    PORT          - port to listen on (default: 5000)
+    APP_PASSWORD  - shared password required to log in (default: adas123 - override in production)
+    SECRET_KEY    - key used to sign the login session cookie (set a real one in production)
 
 Run directly for local testing:
     python3 app.py
@@ -20,16 +22,44 @@ Run in production with gunicorn (see README.md):
 """
 
 import csv
+import functools
 import os
+from datetime import timedelta
 from pathlib import Path
 
-from flask import Flask, abort, render_template, request, send_from_directory
+from flask import (
+    Flask,
+    abort,
+    redirect,
+    render_template,
+    request,
+    send_from_directory,
+    session,
+    url_for,
+)
 from werkzeug.utils import secure_filename
 
 VIDEO_DIR = Path(os.environ.get("VIDEO_DIR", Path(__file__).parent / "videos")).resolve()
 ALLOWED_EXTENSIONS = {".mp4", ".webm", ".ogg", ".mov", ".m4v", ".mkv"}
+APP_PASSWORD = os.environ.get("APP_PASSWORD", "adas123")
+CONTACT_EMAILS = ["huuduc.nguyen@vinfastauto.com", "huu.lee@vinfastauto.com"]
 
 app = Flask(__name__)
+# NOTE: the fallback below only keeps sessions valid across a single gunicorn
+# worker set between restarts. Set a real SECRET_KEY in production so logins
+# survive redeploys and are consistent across all workers.
+app.secret_key = os.environ.get("SECRET_KEY", "dev-only-change-me-in-production")
+app.config["PERMANENT_SESSION_LIFETIME"] = timedelta(days=30)
+
+
+def login_required(view):
+    @functools.wraps(view)
+    def wrapped(*args, **kwargs):
+        if not session.get("authenticated"):
+            return redirect(url_for("login", next=request.full_path))
+        return view(*args, **kwargs)
+
+    return wrapped
 
 
 def list_videos_in(folder):
@@ -108,13 +138,37 @@ def safe_path_for(folder, filename):
     return candidate
 
 
+@app.route("/login", methods=["GET", "POST"])
+def login():
+    error = None
+    if request.method == "POST":
+        if request.form.get("password", "") == APP_PASSWORD:
+            session.clear()
+            session["authenticated"] = True
+            session.permanent = True
+            next_url = request.args.get("next")
+            if not next_url or not next_url.startswith("/") or next_url.startswith("//"):
+                next_url = url_for("index")
+            return redirect(next_url)
+        error = "Wrong password."
+    return render_template("login.html", error=error, contact_emails=CONTACT_EMAILS)
+
+
+@app.route("/logout", methods=["POST"])
+def logout():
+    session.clear()
+    return redirect(url_for("login"))
+
+
 @app.route("/")
+@login_required
 def index():
     folders = list_folders()
     return render_template("index.html", folders=folders, video_dir=str(VIDEO_DIR))
 
 
 @app.route("/compare")
+@login_required
 def compare():
     requested = request.args.getlist("f")
     folders = []
@@ -145,6 +199,7 @@ def compare():
 
 
 @app.route("/media/<folder>/<path:filename>")
+@login_required
 def media(folder, filename):
     folder_path = safe_folder_for(folder)
     path = safe_path_for(folder_path, filename)

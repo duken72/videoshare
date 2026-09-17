@@ -7,19 +7,25 @@
 <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
 </head>
 <body>
-<header>
-  <h1>Video Compare</h1>
-  <p>Serving from <code>{{ video_dir }}</code> — pick run folders, then share the link.</p>
+<header class="header-row">
+  <div>
+    <h1>Video Compare</h1>
+    <p>Serving from <code>{{ video_dir }}</code> — pick run folders, then share the link.</p>
+  </div>
+  <form class="logout-form" method="post" action="{{ url_for('logout') }}">
+    <button type="submit" class="secondary">Log out</button>
+  </form>
 </header>
 <main>
   {% if folders %}
   <form id="picker" action="/compare" method="get">
-    {% for f in folders %}
-    <div class="video-row">
-      <input type="checkbox" name="f" value="{{ f }}" id="cb-{{ loop.index }}">
-      <label for="cb-{{ loop.index }}">{{ f }}</label>
-    </div>
-    {% endfor %}
+    <input type="text" id="folder-filter" class="folder-filter" placeholder="Filter folders…" autocomplete="off">
+    <select name="f" id="folder-select" class="folder-select" multiple size="12">
+      {% for f in folders %}
+      <option value="{{ f }}">{{ f }}</option>
+      {% endfor %}
+    </select>
+    <p class="select-hint">Ctrl/Cmd-click (or Shift-click for a range) to select multiple folders.</p>
     <div class="toolbar">
       <button type="submit">Compare selected</button>
       <span id="count" style="color: var(--muted); font-size: 0.88rem;"></span>
@@ -34,14 +40,23 @@
   {% endif %}
 </main>
 <script>
-  const boxes = document.querySelectorAll('input[type="checkbox"]');
+  const select = document.getElementById('folder-select');
+  const filter = document.getElementById('folder-filter');
   const count = document.getElementById('count');
-  function update() {
-    const n = document.querySelectorAll('input[type="checkbox"]:checked').length;
+
+  function updateCount() {
+    const n = select.selectedOptions.length;
     count.textContent = n ? `${n} selected` : '';
   }
-  boxes.forEach(b => b.addEventListener('change', update));
-  update();
+  select.addEventListener('change', updateCount);
+  updateCount();
+
+  filter.addEventListener('input', () => {
+    const q = filter.value.trim().toLowerCase();
+    Array.from(select.options).forEach(opt => {
+      opt.hidden = q !== '' && !opt.value.toLowerCase().includes(q);
+    });
+  });
 </script>
 </body>
 </html>

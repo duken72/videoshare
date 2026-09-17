@@ -50,28 +50,43 @@ form#picker {
   gap: 10px;
 }
 
-.video-row {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  padding: 10px 14px;
+.folder-filter {
   background: var(--panel);
   border: 1px solid var(--border);
-  border-radius: 8px;
+  color: var(--text);
+  padding: 10px 12px;
+  border-radius: 7px;
+  font-size: 0.92rem;
 }
 
-.video-row label {
-  cursor: pointer;
-  flex: 1;
-  word-break: break-all;
+.folder-filter:focus {
+  outline: none;
+  border-color: var(--accent);
+}
+
+.folder-select {
+  background: var(--panel);
+  border: 1px solid var(--border);
+  color: var(--text);
+  border-radius: 8px;
+  padding: 6px;
   font-size: 0.95rem;
 }
 
-.video-row input[type="checkbox"] {
-  width: 17px;
-  height: 17px;
-  accent-color: var(--accent);
-  cursor: pointer;
+.folder-select option {
+  padding: 7px 10px;
+  border-radius: 5px;
+}
+
+.folder-select option:checked {
+  background: var(--accent) linear-gradient(0deg, var(--accent) 0%, var(--accent) 100%);
+  color: #0b0d10;
+}
+
+.select-hint {
+  margin: 0;
+  color: var(--muted);
+  font-size: 0.82rem;
 }
 
 .toolbar {
@@ -246,3 +261,83 @@ code {
 }
 
 .toast.show { opacity: 1; }
+
+/* --- Login page --- */
+
+.login-body {
+  min-height: 100vh;
+  display: flex;
+}
+
+.login-main {
+  margin: auto;
+  padding: 24px;
+  width: 100%;
+  max-width: 360px;
+}
+
+.login-card {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 28px 24px;
+}
+
+.login-card h1 {
+  margin: 0;
+  font-size: 1.2rem;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+}
+
+.login-subtitle {
+  margin: 0 0 4px;
+  color: var(--muted);
+  font-size: 0.9rem;
+}
+
+.login-card input[type="password"] {
+  background: var(--bg);
+  border: 1px solid var(--border);
+  color: var(--text);
+  padding: 10px 12px;
+  border-radius: 7px;
+  font-size: 0.95rem;
+}
+
+.login-error {
+  background: #3a1d22;
+  border: 1px solid #6b2b34;
+  color: #ff9aa6;
+  padding: 8px 12px;
+  border-radius: 7px;
+  font-size: 0.85rem;
+}
+
+.login-contact {
+  margin: 8px 0 0;
+  color: var(--muted);
+  font-size: 0.8rem;
+  line-height: 1.5;
+}
+
+.login-contact a {
+  color: var(--accent);
+}
+
+/* --- Logout button (header) --- */
+
+.header-row {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.logout-form button {
+  padding: 7px 14px;
+  font-size: 0.85rem;
+}

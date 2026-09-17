@@ -123,17 +123,31 @@ server {
 Then `sudo systemctl reload nginx`, and optionally get HTTPS with
 `sudo certbot --nginx -d videos.example.com`.
 
-## Notes on security
+## Authentication
 
-This app has **no authentication** — anyone with the link (or who can guess
-folder/file names) can view listed videos and stats. That's fine on a
-private/trusted network, but if the server is internet-facing, consider one
-of:
+The app is protected by a single shared password (session-cookie login, not
+HTTP Basic Auth) — every route redirects to `/login` until you sign in.
+Configure it with environment variables:
 
-- Put it behind nginx `auth_basic` (simple username/password prompt), or
-- Only expose it over a VPN/Tailscale, or
-- Bind gunicorn to `127.0.0.1` and use an SSH tunnel when you need it:
-  `ssh -L 5000:localhost:5000 your-user@your-server`
+```bash
+export APP_PASSWORD=your-password      # default: adas123 - change this
+export SECRET_KEY=some-long-random-string  # signs the session cookie
+```
+
+Set both in `videoshare.service` (or your shell) before running for real —
+the defaults baked into `app.py` are for local testing only. `SECRET_KEY`
+in particular must be a real secret in production: anyone who knows it can
+forge a valid login session.
+
+This is a single shared password with no per-user accounts or audit trail —
+fine for a small trusted team, not a substitute for real access control on
+sensitive data. The login page shows a "need access?" contact link; edit
+`CONTACT_EMAILS` in `app.py` to change who that points to.
+
+Since the password travels in the login POST body, only run this over
+HTTPS (see the nginx + certbot section above) or on a private
+network/VPN/SSH tunnel — plain HTTP leaks the password to anyone who can
+see the traffic.
 
 ## How sharing works
 

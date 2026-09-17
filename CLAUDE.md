@@ -25,7 +25,8 @@ gunicorn -w 2 -b 0.0.0.0:5000 app:app
 ```
 
 Configure via env vars (see top of `app.py`): `VIDEO_DIR` (default `./videos`),
-`HOST` (default `0.0.0.0`), `PORT` (default `5000`).
+`HOST` (default `0.0.0.0`), `PORT` (default `5000`), `APP_PASSWORD` (default
+`adas123` — the login password), `SECRET_KEY` (session-cookie signing key).
 
 There are no automated tests, linter, or build tooling in this repo.
 
@@ -34,11 +35,23 @@ There are no automated tests, linter, or build tooling in this repo.
 The data model is folder-based: each **immediate subfolder** of `VIDEO_DIR`
 is one selectable "run," expected to contain one or more videos plus an
 optional stats `.csv` (two columns: label, value). Everything server-side
-lives in `app.py` (three routes):
+lives in `app.py`. Every route except `/login` is wrapped in
+`@login_required`, which checks `session["authenticated"]` (set by
+`/login` after checking `request.form["password"]` against `APP_PASSWORD`)
+and redirects to `/login?next=<original path>` otherwise; `next` is
+validated to be a same-site relative path to avoid becoming an open
+redirect. Routes:
 
+- `GET/POST /login` (`login`) — renders the password form
+  (`templates/login.html`, which also shows `CONTACT_EMAILS` as a "need
+  access?" link) and, on a correct password, sets the session cookie and
+  redirects to `next` (or `/`).
+- `POST /logout` (`logout`) — clears the session.
 - `GET /` (`index`) — lists immediate subfolders of `VIDEO_DIR` that contain
-  at least one video via `list_folders()`, renders the checkbox picker
-  (`templates/index.html`).
+  at least one video via `list_folders()`, renders the picker
+  (`templates/index.html`): a native `<select multiple>` (scales to many
+  folders better than a checkbox list) with a JS-driven text filter above it
+  that hides non-matching `<option>`s client-side.
 - `GET /compare?f=<folder>&f=<folder>...` (`compare`) — takes repeated `f`
   query params, silently drops any that don't resolve to a real folder with
   videos (per-entry, not a hard 404), and for each surviving folder gathers
@@ -67,10 +80,12 @@ toolbar buttons iterate all `video.synced` elements directly, and a
 tolerance) when one is scrubbed. There's no server coordination — each
 browser tab syncs its own set of `<video>` elements independently.
 
-**No authentication.** Anyone with a `/compare` link (or who guesses
-folder/file names) can view videos and stats. The intended deployment model
-(per README) is a private network, VPN/Tailscale, an SSH tunnel, or nginx
-`auth_basic` in front — not adding auth to the app itself.
+**Authentication is a single shared password**, not per-user accounts — see
+`login_required`/`APP_PASSWORD`/`SECRET_KEY` above. There's no rate
+limiting or lockout on `/login`, and the session cookie's security depends
+entirely on `SECRET_KEY` being a real secret in production (the fallback in
+`app.py` is dev-only) and on the app being served over HTTPS or a private
+network (per README) so the password isn't sent in the clear.
 
 ## Deployment shape
 

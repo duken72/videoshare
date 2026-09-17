@@ -1,0 +1,28 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Sign in — Video Compare</title>
+<link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body class="login-body">
+<main class="login-main">
+  <form class="login-card" method="post">
+    <h1>Video Compare</h1>
+    <p class="login-subtitle">Enter the password to view videos.</p>
+    {% if error %}
+    <div class="login-error">{{ error }}</div>
+    {% endif %}
+    <input type="password" name="password" placeholder="Password" autofocus required>
+    <button type="submit">Sign in</button>
+    {% if contact_emails %}
+    <p class="login-contact">
+      Need access? Contact
+      {% for email in contact_emails %}<a href="mailto:{{ email }}">{{ email }}</a>{% if not loop.last %} or {% endif %}{% endfor %}.
+    </p>
+    {% endif %}
+  </form>
+</main>
+</body>
+</html>
