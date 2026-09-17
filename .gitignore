@@ -29,3 +29,6 @@ ENV/
 
 # Video data (large, environment-specific - not source)
 videos/
+
+# Local git worktrees
+.claude/worktrees/
