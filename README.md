@@ -10,19 +10,29 @@ and reasonably in-sync scrubbing).
 
 <!-- vim-markdown-toc GFM -->
 
-    * [Files](#files)
-    * [Installation](#installation)
-    * [Point it at your run folders](#point-it-at-your-run-folders)
-    * [Test locally on the server](#test-locally-on-the-server)
-    * [Create a Service (recommended)](#create-a-service-recommended)
-    * [Quick public share with zrok](#quick-public-share-with-zrok)
-    * [Authentication](#authentication)
-    * [How sharing works](#how-sharing-works)
+* [Installation](#installation)
+    * [Repo Structure](#repo-structure)
+    * [Where to place the data](#where-to-place-the-data)
+* [Local development setup](#local-development-setup)
+* [Allowing public access](#allowing-public-access)
+    * [gunicorn (systemd service)](#gunicorn-systemd-service)
+    * [zrok](#zrok)
+    * [nginx](#nginx)
+* [Authentication](#authentication)
+* [How sharing works](#how-sharing-works)
 * [TODO](#todo)
 
 <!-- vim-markdown-toc -->
 
-## Files
+## Installation
+
+```bash
+python3 -m venv .venv
+source .venv/bin/activate
+pip install -r requirements.txt
+```
+
+### Repo Structure
 
 ```
 videoshare/
@@ -35,15 +45,7 @@ videoshare/
 └── videoshare.service  # example systemd unit
 ```
 
-## Installation
-
-```bash
-python3 -m venv .venv
-source .venv/bin/activate
-pip install -r requirements.txt
-```
-
-## Point it at your run folders
+### Where to place the data
 
 By default it looks for a `data/` folder in your home directory (`~/data`).
 Either put your run folders there, or point `VIDEO_DIR` at wherever they
@@ -80,7 +82,9 @@ rows line up meaningfully. Folders can have different numbers of videos;
 missing cells are just left blank. If a folder has more than one `.csv`
 file, the first one alphabetically is used.
 
-## Test locally on the server
+## Local development setup
+
+After this setup, the web app can be viewed only from the server.
 
 ```bash
 python3 app.py
@@ -97,12 +101,13 @@ http://YOUR_SERVER_IP:5000/compare?f=run_a&f=run_b
 
 If you open the service publicly, it would be visible to anyone who opens it, they sees the same comparison using that URL.
 
-## Create a Service (recommended)
+## Allowing public access
 
-Don't leave the dev server running long-term. Use gunicorn behind systemd,
-optionally with nginx in front for a clean URL/port and HTTPS.
+Don't leave the dev server running long-term. Run gunicorn behind systemd
+first, then pick how to expose it publicly: zrok for a quick tunnel with
+no server config, or nginx for a stable domain/URL with HTTPS.
 
-**systemd service:**
+### gunicorn (systemd service)
 
 Edit `videoshare.service` (set `User`, `WorkingDirectory`, `VIDEO_DIR`), then:
 
@@ -118,16 +123,65 @@ itself. That's different from `python3 app.py` above, which listens on
 `0.0.0.0` (every interface) and is why it's reachable from your public/LAN
 IP by default. Once you switch to the service, the same `http://YOUR_SERVER_IP:5000`
 link will stop connecting even though the service is running — that's
-expected, not a bug: gunicorn is meant to sit behind nginx rather than face
-the network directly. Put nginx in front (below) to restore public access,
-or, if you'd rather skip nginx, change `-b 127.0.0.1:5000` to
-`-b 0.0.0.0:5000` in `videoshare.service`'s `ExecStart` (then `daemon-reload`
-+ `restart`) — but note `APP_PASSWORD` then travels over plain HTTP, so
-restrict access with a firewall rule if the server is internet-facing.
+expected, not a bug: gunicorn is meant to sit behind a tunnel or reverse
+proxy rather than face the network directly. Use zrok or nginx below to
+restore public access, or, if you'd rather skip both, change
+`-b 127.0.0.1:5000` to `-b 0.0.0.0:5000` in `videoshare.service`'s
+`ExecStart` (then `daemon-reload` + `restart`) — but note `APP_PASSWORD`
+then travels over plain HTTP, so restrict access with a firewall rule if
+the server is internet-facing.
 
-**nginx reverse proxy** (recommended — gives you port 80/443 and a
-normal-looking URL instead of `:5000`, and keeps gunicorn off the network
-directly):
+### zrok
+
+If you just want a public link without setting up nginx, DNS, or certbot,
+[zrok](https://docs.zrok.io) tunnels a local port out to a public HTTPS URL
+for you — no inbound firewall rule needed. Good for a quick share; nginx
+below is still the better fit for a stable, permanent URL.
+
+**One-time setup:**
+
+```bash
+curl -sSLf https://get.openziti.io/install.bash | sudo bash -s zrok
+zrok version   # confirms it installed
+
+zrok invite                # creates a free zrok.io account (email verification)
+zrok enable <your_token>   # links this machine to your account (token is emailed to you)
+```
+
+If you already have a zrok account, skip `zrok invite` and just run `zrok
+enable <your_token>` with the token from your account page.
+
+**Share the app:**
+
+With gunicorn running (from the systemd service above, already bound to
+`127.0.0.1:5000`) — or the dev server via `HOST=127.0.0.1 python3 app.py`
+— run, in another terminal:
+
+```bash
+zrok share public http://127.0.0.1:5000
+```
+
+This prints a public `https://something.share.zrok.io` URL — that's your
+shareable link. zrok terminates HTTPS for you, so `APP_PASSWORD` isn't sent
+in the clear even though gunicorn/Flask itself only speaks plain HTTP
+locally.
+
+Notes:
+
+- Each `zrok share public` run gets a new random URL by default (the
+  session ends when you `Ctrl-C` it) — check zrok's *reserved* shares if
+  you want a stable URL that survives restarts.
+- Keep gunicorn/Flask bound to `127.0.0.1`, not `0.0.0.0` — zrok reaches it
+  locally, so it never needs to be reachable from the network directly, and
+  no `ufw allow` rule is needed for this path.
+- `APP_PASSWORD`/`SECRET_KEY` still matter exactly as much as with nginx —
+  a zrok public share is reachable by anyone with the URL, same as any
+  other public tunnel.
+
+### nginx
+
+nginx reverse proxy — gives you port 80/443 and a normal-looking URL
+instead of `:5000`, and keeps gunicorn off the network directly.
 
 If you have a domain pointed at the server:
 
@@ -186,58 +240,6 @@ Once nginx is proxying, visit `http://<server-ip>/` (or your domain) — no
 the dev-server step above, since gunicorn no longer needs to be reachable
 from outside the server.
 
-## Quick public share with zrok
-
-If you just want a public link without setting up nginx, DNS, or certbot,
-[zrok](https://docs.zrok.io) tunnels a local port out to a public HTTPS URL
-for you — no inbound firewall rule needed. Good for a quick share; the
-nginx setup above is still the better fit for a stable, permanent URL.
-
-**One-time setup:**
-
-```bash
-curl -sSLf https://get.openziti.io/install.bash | sudo bash -s zrok
-zrok version   # confirms it installed
-
-zrok invite                # creates a free zrok.io account (email verification)
-zrok enable <your_token>   # links this machine to your account (token is emailed to you)
-```
-
-If you already have a zrok account, skip `zrok invite` and just run `zrok
-enable <your_token>` with the token from your account page.
-
-**Share the app:**
-
-Run the app bound to `127.0.0.1` — either the dev server:
-
-```bash
-HOST=127.0.0.1 python3 app.py
-```
-
-or the systemd service from above, which already binds to `127.0.0.1:5000`.
-Then, in another terminal:
-
-```bash
-zrok share public http://127.0.0.1:5000
-```
-
-This prints a public `https://something.share.zrok.io` URL — that's your
-shareable link. zrok terminates HTTPS for you, so `APP_PASSWORD` isn't sent
-in the clear even though gunicorn/Flask itself only speaks plain HTTP
-locally.
-
-Notes:
-
-- Each `zrok share public` run gets a new random URL by default (the
-  session ends when you `Ctrl-C` it) — check zrok's *reserved* shares if
-  you want a stable URL that survives restarts.
-- Keep gunicorn/Flask bound to `127.0.0.1`, not `0.0.0.0` — zrok reaches it
-  locally, so it never needs to be reachable from the network directly, and
-  no `ufw allow` rule is needed for this path.
-- `APP_PASSWORD`/`SECRET_KEY` still matter exactly as much as with nginx —
-  a zrok public share is reachable by anyone with the URL, same as any
-  other public tunnel.
-
 ## Authentication
 
 The app is protected by a single shared password (session-cookie login, not
@@ -260,7 +262,7 @@ sensitive data. The login page shows a "need access?" contact link; edit
 `CONTACT_EMAILS` in `app.py` to change who that points to.
 
 Since the password travels in the login POST body, only run this over
-HTTPS (see the nginx + certbot section above) or on a private
+HTTPS (see the nginx or zrok subsections above) or on a private
 network/VPN/SSH tunnel — plain HTTP leaks the password to anyone who can
 see the traffic.
 
@@ -273,7 +275,7 @@ folders are blocked), and renders one table column per folder: its videos
 requests so scrubbing/seeking works normally) stacked in sorted filename
 order, with its stats CSV rendered as a label/value list underneath.
 
-# TODO
+## TODO
 
 - Include tags to filter
     - perception
