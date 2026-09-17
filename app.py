@@ -40,7 +40,7 @@ from flask import (
 from werkzeug.utils import secure_filename
 
 VIDEO_DIR = Path(os.environ.get("VIDEO_DIR", Path.home() / "data")).resolve()
-ALLOWED_EXTENSIONS = {".mp4", ".webm", ".ogg", ".mov", ".m4v", ".mkv", ".avi"}
+ALLOWED_EXTENSIONS = {".mp4", ".webm", ".ogg", ".mov", ".m4v", ".mkv"}
 APP_PASSWORD = os.environ.get("APP_PASSWORD", "adas123")
 CONTACT_EMAILS = ["huuduc.nguyen@vinfastauto.com", "huu.lee@vinfastauto.com"]
 
