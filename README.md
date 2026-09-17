@@ -104,7 +104,7 @@ If you open the service publicly, it would be visible to anyone who opens it, th
 ## Allowing public access
 
 Don't leave the dev server running long-term. Run gunicorn behind systemd
-first, then pick how to expose it publicly: zrok for a quick tunnel with
+first, then pick how to expose it publicly: `zrok` for a quick tunnel with
 no server config, or nginx for a stable domain/URL with HTTPS.
 
 ### gunicorn (systemd service)
@@ -124,7 +124,7 @@ itself. That's different from `python3 app.py` above, which listens on
 IP by default. Once you switch to the service, the same `http://YOUR_SERVER_IP:5000`
 link will stop connecting even though the service is running — that's
 expected, not a bug: gunicorn is meant to sit behind a tunnel or reverse
-proxy rather than face the network directly. Use zrok or nginx below to
+proxy rather than face the network directly. Use `zrok` or nginx below to
 restore public access, or, if you'd rather skip both, change
 `-b 127.0.0.1:5000` to `-b 0.0.0.0:5000` in `videoshare.service`'s
 `ExecStart` (then `daemon-reload` + `restart`) — but note `APP_PASSWORD`
@@ -134,7 +134,7 @@ the server is internet-facing.
 ### zrok
 
 If you just want a public link without setting up nginx, DNS, or certbot,
-[zrok](https://docs.zrok.io) tunnels a local port out to a public HTTPS URL
+[`zrok`](https://docs.zrok.io) tunnels a local port out to a public HTTPS URL
 for you — no inbound firewall rule needed. Good for a quick share; nginx
 below is still the better fit for a stable, permanent URL.
 
@@ -162,20 +162,20 @@ zrok share public http://127.0.0.1:5000
 ```
 
 This prints a public `https://something.share.zrok.io` URL — that's your
-shareable link. zrok terminates HTTPS for you, so `APP_PASSWORD` isn't sent
+shareable link. `zrok` terminates HTTPS for you, so `APP_PASSWORD` isn't sent
 in the clear even though gunicorn/Flask itself only speaks plain HTTP
 locally.
 
 Notes:
 
 - Each `zrok share public` run gets a new random URL by default (the
-  session ends when you `Ctrl-C` it) — check zrok's *reserved* shares if
+  session ends when you `Ctrl-C` it) — check `zrok`'s *reserved* shares if
   you want a stable URL that survives restarts.
-- Keep gunicorn/Flask bound to `127.0.0.1`, not `0.0.0.0` — zrok reaches it
+- Keep gunicorn/Flask bound to `127.0.0.1`, not `0.0.0.0` — `zrok` reaches it
   locally, so it never needs to be reachable from the network directly, and
   no `ufw allow` rule is needed for this path.
 - `APP_PASSWORD`/`SECRET_KEY` still matter exactly as much as with nginx —
-  a zrok public share is reachable by anyone with the URL, same as any
+  a `zrok` public share is reachable by anyone with the URL, same as any
   other public tunnel.
 
 ### nginx
@@ -262,7 +262,7 @@ sensitive data. The login page shows a "need access?" contact link; edit
 `CONTACT_EMAILS` in `app.py` to change who that points to.
 
 Since the password travels in the login POST body, only run this over
-HTTPS (see the nginx or zrok subsections above) or on a private
+HTTPS (see the nginx or `zrok` subsections above) or on a private
 network/VPN/SSH tunnel — plain HTTP leaks the password to anyone who can
 see the traffic.
 
