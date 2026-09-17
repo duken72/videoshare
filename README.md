@@ -15,6 +15,7 @@ and reasonably in-sync scrubbing).
     * [Point it at your run folders](#point-it-at-your-run-folders)
     * [Test locally on the server](#test-locally-on-the-server)
     * [Create a Service (recommended)](#create-a-service-recommended)
+    * [Quick public share with zrok](#quick-public-share-with-zrok)
     * [Authentication](#authentication)
     * [How sharing works](#how-sharing-works)
 * [TODO](#todo)
@@ -184,6 +185,58 @@ Once nginx is proxying, visit `http://<server-ip>/` (or your domain) — no
 `:5000` needed. You can also remove the `sudo ufw allow 5000/tcp` rule from
 the dev-server step above, since gunicorn no longer needs to be reachable
 from outside the server.
+
+## Quick public share with zrok
+
+If you just want a public link without setting up nginx, DNS, or certbot,
+[zrok](https://docs.zrok.io) tunnels a local port out to a public HTTPS URL
+for you — no inbound firewall rule needed. Good for a quick share; the
+nginx setup above is still the better fit for a stable, permanent URL.
+
+**One-time setup:**
+
+```bash
+curl -sSLf https://get.openziti.io/install.bash | sudo bash -s zrok
+zrok version   # confirms it installed
+
+zrok invite                # creates a free zrok.io account (email verification)
+zrok enable <your_token>   # links this machine to your account (token is emailed to you)
+```
+
+If you already have a zrok account, skip `zrok invite` and just run `zrok
+enable <your_token>` with the token from your account page.
+
+**Share the app:**
+
+Run the app bound to `127.0.0.1` — either the dev server:
+
+```bash
+HOST=127.0.0.1 python3 app.py
+```
+
+or the systemd service from above, which already binds to `127.0.0.1:5000`.
+Then, in another terminal:
+
+```bash
+zrok share public http://127.0.0.1:5000
+```
+
+This prints a public `https://something.share.zrok.io` URL — that's your
+shareable link. zrok terminates HTTPS for you, so `APP_PASSWORD` isn't sent
+in the clear even though gunicorn/Flask itself only speaks plain HTTP
+locally.
+
+Notes:
+
+- Each `zrok share public` run gets a new random URL by default (the
+  session ends when you `Ctrl-C` it) — check zrok's *reserved* shares if
+  you want a stable URL that survives restarts.
+- Keep gunicorn/Flask bound to `127.0.0.1`, not `0.0.0.0` — zrok reaches it
+  locally, so it never needs to be reachable from the network directly, and
+  no `ufw allow` rule is needed for this path.
+- `APP_PASSWORD`/`SECRET_KEY` still matter exactly as much as with nginx —
+  a zrok public share is reachable by anyone with the URL, same as any
+  other public tunnel.
 
 ## Authentication
 
