@@ -1,6 +1,6 @@
 # videoshare
 
-A tiny Flask app: pick subfolders, each corresponds to a test output,
+A tiny `Flask` app: pick subfolders, each corresponds to a test output,
 from a folder on your server, hit **Compare**, and get a shareable link
 that shows them side by side — one column per folder, its videos stacked
 on top and its stats CSV rendered below (with synced play / pause / restart,
@@ -103,9 +103,9 @@ If you open the service publicly, it would be visible to anyone who opens it, th
 
 ## Allowing public access
 
-Don't leave the dev server running long-term. Run gunicorn behind systemd
+Don't leave the dev server running long-term. Run `gunicorn` behind `systemd`
 first, then pick how to expose it publicly: `zrok` for a quick tunnel with
-no server config, or nginx for a stable domain/URL with HTTPS.
+no server config, or `nginx` for a stable domain/URL with HTTPS.
 
 ### gunicorn (systemd service)
 
@@ -118,13 +118,13 @@ sudo systemctl enable --now videoshare
 sudo systemctl status videoshare
 ```
 
-This binds gunicorn to `127.0.0.1:5000` — reachable only from the server
+This binds `gunicorn` to `127.0.0.1:5000` — reachable only from the server
 itself. That's different from `python3 app.py` above, which listens on
 `0.0.0.0` (every interface) and is why it's reachable from your public/LAN
 IP by default. Once you switch to the service, the same `http://YOUR_SERVER_IP:5000`
 link will stop connecting even though the service is running — that's
-expected, not a bug: gunicorn is meant to sit behind a tunnel or reverse
-proxy rather than face the network directly. Use `zrok` or nginx below to
+expected, not a bug: `gunicorn` is meant to sit behind a tunnel or reverse
+proxy rather than face the network directly. Use `zrok` or `nginx` below to
 restore public access, or, if you'd rather skip both, change
 `-b 127.0.0.1:5000` to `-b 0.0.0.0:5000` in `videoshare.service`'s
 `ExecStart` (then `daemon-reload` + `restart`) — but note `APP_PASSWORD`
@@ -133,9 +133,9 @@ the server is internet-facing.
 
 ### zrok
 
-If you just want a public link without setting up nginx, DNS, or certbot,
+If you just want a public link without setting up `nginx`, DNS, or `certbot`,
 [`zrok`](https://docs.zrok.io) tunnels a local port out to a public HTTPS URL
-for you — no inbound firewall rule needed. Good for a quick share; nginx
+for you — no inbound firewall rule needed. Good for a quick share; `nginx`
 below is still the better fit for a stable, permanent URL.
 
 **One-time setup:**
@@ -153,7 +153,7 @@ enable <your_token>` with the token from your account page.
 
 **Share the app:**
 
-With gunicorn running (from the systemd service above, already bound to
+With `gunicorn` running (from the `systemd` service above, already bound to
 `127.0.0.1:5000`) — or the dev server via `HOST=127.0.0.1 python3 app.py`
 — run, in another terminal:
 
@@ -163,7 +163,7 @@ zrok share public http://127.0.0.1:5000
 
 This prints a public `https://something.share.zrok.io` URL — that's your
 shareable link. `zrok` terminates HTTPS for you, so `APP_PASSWORD` isn't sent
-in the clear even though gunicorn/Flask itself only speaks plain HTTP
+in the clear even though `gunicorn`/`Flask` itself only speaks plain HTTP
 locally.
 
 Notes:
@@ -171,17 +171,17 @@ Notes:
 - Each `zrok share public` run gets a new random URL by default (the
   session ends when you `Ctrl-C` it) — check `zrok`'s *reserved* shares if
   you want a stable URL that survives restarts.
-- Keep gunicorn/Flask bound to `127.0.0.1`, not `0.0.0.0` — `zrok` reaches it
+- Keep `gunicorn`/`Flask` bound to `127.0.0.1`, not `0.0.0.0` — `zrok` reaches it
   locally, so it never needs to be reachable from the network directly, and
   no `ufw allow` rule is needed for this path.
-- `APP_PASSWORD`/`SECRET_KEY` still matter exactly as much as with nginx —
+- `APP_PASSWORD`/`SECRET_KEY` still matter exactly as much as with `nginx` —
   a `zrok` public share is reachable by anyone with the URL, same as any
   other public tunnel.
 
 ### nginx
 
-nginx reverse proxy — gives you port 80/443 and a normal-looking URL
-instead of `:5000`, and keeps gunicorn off the network directly.
+`nginx` reverse proxy — gives you port 80/443 and a normal-looking URL
+instead of `:5000`, and keeps `gunicorn` off the network directly.
 
 If you have a domain pointed at the server:
 
@@ -235,9 +235,9 @@ sudo systemctl enable nginx
 sudo ufw allow 80/tcp
 ```
 
-Once nginx is proxying, visit `http://<server-ip>/` (or your domain) — no
+Once `nginx` is proxying, visit `http://<server-ip>/` (or your domain) — no
 `:5000` needed. You can also remove the `sudo ufw allow 5000/tcp` rule from
-the dev-server step above, since gunicorn no longer needs to be reachable
+the dev-server step above, since `gunicorn` no longer needs to be reachable
 from outside the server.
 
 ## Authentication
@@ -262,7 +262,7 @@ sensitive data. The login page shows a "need access?" contact link; edit
 `CONTACT_EMAILS` in `app.py` to change who that points to.
 
 Since the password travels in the login POST body, only run this over
-HTTPS (see the nginx or `zrok` subsections above) or on a private
+HTTPS (see the `nginx` or `zrok` subsections above) or on a private
 network/VPN/SSH tunnel — plain HTTP leaks the password to anyone who can
 see the traffic.
 
