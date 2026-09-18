@@ -286,3 +286,4 @@ order, with its stats CSV rendered as a label/value list underneath.
 - Include tags to filter
     - perception
     - motion-planning
+- Naming convention: <YYMMDD>-<dataset>-<commit>
