@@ -49,7 +49,8 @@ videoshare/
 
 ### Where to place the data
 
-By default it looks for a `data/` folder in your home directory (`~/data`).
+By default it looks for a `test-results/` folder in your home directory
+(`~/test-results`).
 Either put your run folders there, or point `VIDEO_DIR` at wherever they
 already live:
 
