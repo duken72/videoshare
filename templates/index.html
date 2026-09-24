@@ -99,11 +99,28 @@
     selectVisible.checked = false;
   }
 
-  // Clicking anywhere on a row toggles its checkbox.
+  // Clicking anywhere on a row toggles its checkbox. Shift+click applies the
+  // clicked row's new state to every visible row between it and the last
+  // clicked row.
+  let lastClicked = null;
   rows.forEach(row => row.addEventListener('click', e => {
     if (e.target.tagName !== 'INPUT') box(row).checked = !box(row).checked;
-    row.classList.toggle('selected', box(row).checked);
+    const state = box(row).checked;
+    let range = [row];
+    if (e.shiftKey && lastClicked && lastClicked !== row) {
+      const [a, b] = [rows.indexOf(lastClicked), rows.indexOf(row)].sort((x, y) => x - y);
+      range = rows.slice(a, b + 1).filter(r => !r.hidden);
+    }
+    range.forEach(r => {
+      box(r).checked = state;
+      r.classList.toggle('selected', state);
+    });
+    lastClicked = row;
     updateCount();
+  }));
+  // Keep shift+click from highlighting text across the rows.
+  rows.forEach(row => row.addEventListener('mousedown', e => {
+    if (e.shiftKey) e.preventDefault();
   }));
 
   selectVisible.addEventListener('change', () => {
