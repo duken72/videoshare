@@ -18,23 +18,21 @@
 </header>
 <main class="wide">
   <div class="compare-toolbar">
+    <button id="sync-play" class="secondary">Play all</button>
+    <button id="sync-pause" class="secondary">Pause all</button>
+    <button id="sync-restart" class="secondary">Restart all</button>
     <div class="share-box">
-      <input type="text" id="share-url" value="{{ share_url }}" readonly>
-      <button id="copy-btn" class="secondary">Copy link</button>
+      <button id="copy-btn" class="secondary" data-url="{{ share_url }}">Copy link</button>
     </div>
   </div>
 
   <div class="table-wrap">
     <table class="compare-table labeled">
-      <thead>
-        <tr>
-          <th class="row-label case-label"></th>
-          {% for g in groups %}
-          <th><div class="case-title">{{ key_label }} {% if key == 'commit' %}<code title="{{ g.value }}">{{ g.label }}</code>{% else %}{{ g.label }}{% endif %}</div></th>
-          {% endfor %}
-        </tr>
-      </thead>
       <tbody>
+        <tr class="meta-row">
+          <th class="row-label" scope="row">{{ key_label }}</th>
+          {% for g in groups %}<td>{% if key == 'commit' %}<code title="{{ g.value }}">{{ g.label }}</code>{% else %}{{ g.label }}{% endif %}</td>{% endfor %}
+        </tr>
         <tr class="meta-row">
           <th class="row-label" scope="row">Successful runs</th>
           {% for g in groups %}
@@ -47,54 +45,70 @@
           {% endfor %}
         </tr>
         <tr class="meta-row">
-          {% if key == 'build_id' %}
-          <th class="row-label" scope="row">Commits</th>
-          {% for g in groups %}<td>{% for c in g.commits %}<code>{{ c }}</code> {% endfor %}</td>{% endfor %}
-          {% else %}
-          <th class="row-label" scope="row">Builds</th>
-          {% for g in groups %}<td>{{ g.builds|join(', ') }}</td>{% endfor %}
-          {% endif %}
-        </tr>
-        <tr class="meta-row">
-          <th class="row-label" scope="row">CI runs</th>
-          {% for g in groups %}<td>{{ g.runs|length }}</td>{% endfor %}
-        </tr>
-        <tr class="meta-row">
           <th class="row-label" scope="row">Latest</th>
           {% for g in groups %}
           <td class="times">{% for label, t in g.times.items() %}<div>{{ t }} ({{ label }})</div>{% endfor %}</td>
           {% endfor %}
         </tr>
+        {% for skey in stat_keys %}
+        <tr class="stat-row{{ ' first' if loop.first }}">
+          <th class="row-label" scope="row">{{ skey }} <span class="muted-note">mean ± std</span></th>
+          {% for g in groups %}
+          {% set st = g.stats_summary.get(skey) %}
+          <td>{% if st %}{{ '%.4g'|format(st.mean) }} ± {{ '%.4g'|format(st.std) if st.std is not none else '–' }} <span class="muted-note">n={{ st.n }}</span>{% endif %}</td>
+          {% endfor %}
+        </tr>
+        {% else %}
+        <tr class="stat-row first">
+          <th class="row-label" scope="row">Stats</th>
+          {% for g in groups %}<td><span class="muted-note">no numeric stats</span></td>{% endfor %}
+        </tr>
+        {% endfor %}
         {% for row in rows %}
         <tr class="group-row">
-          <th class="row-label case-label" scope="row">
-            {{ row.meta.dataset or row.name }}
-            <span class="muted-note">{{ row.meta.scenario }} · {{ row.meta.car_type }}</span>
-            <a class="muted-note" href="{{ url_for('compare', f=row.ids) }}" style="color: var(--accent);">compare these {{ row.ids|length }} &rarr;</a>
-          </th>
+          {# Label only the first test case's row, so "Videos" appears once. #}
+          <th class="row-label" scope="row">{{ 'Videos' if loop.first }}</th>
           {% for cell in row.cells %}
           <td>
             {% if cell %}
-            <div class="group-cell">
-              <ul>
-                {% for c in cell %}
-                <li>
-                  {% if c.success is sameas true %}<span class="ok" title="success">&#10003;</span>
-                  {% elif c.success is sameas false %}<span class="fail" title="failed">&#10007;</span>
-                  {% else %}<span class="muted-note" title="unknown">?</span>{% endif %}
-                  <a href="{{ url_for('compare', f=c.id) }}" title="{{ c.id }}">{{ c.times[timezones[0][0]] or c.run }} ({{ timezones[0][0] }})</a>
-                  <span class="muted-note">{% if key == 'build_id' %}{{ c.short_commit }}{% else %}{{ c.meta.build_id }}{% endif %} · {{ c.videos|length }} video{{ 's' if c.videos|length != 1 else '' }}</span>
-                </li>
-                {% endfor %}
-              </ul>
+            {# Cells list runs newest first, so show the newest run's videos. #}
+            {% set latest = cell[0] %}
+            {% for v in latest.videos %}
+            <div class="video-card group-video">
+              <video class="synced" data-sync="{{ row.name }}/{{ loop.index0 }}" preload="metadata" controls muted playsinline>
+                <source src="{{ url_for('media', run=latest.run, case=latest.case, filename=v) }}">
+                Your browser doesn't support video playback.
+              </video>
             </div>
+            {% else %}
+            <span class="muted-note">no videos</span>
+            {% endfor %}
             {% else %}
             <span class="muted-note">not run</span>
             {% endif %}
           </td>
           {% endfor %}
         </tr>
+        {# One merged cell across the group columns naming the test case above. #}
+        <tr class="case-info-row">
+          <th class="row-label"></th>
+          <td class="case-info" colspan="{{ groups|length }}">
+            <span><span class="muted-note">Scenario</span> {{ row.meta.scenario }}</span>
+            <span><span class="muted-note">Car type</span> {{ row.meta.car_type }}</span>
+            <span><span class="muted-note">Dataset</span> {{ row.meta.dataset or row.name }}</span>
+            <a href="{{ url_for('compare', f=row.ids) }}">compare these {{ row.ids|length }} &rarr;</a>
+          </td>
+        </tr>
         {% endfor %}
+        <tr class="meta-row first">
+          {% if key == 'build_id' %}
+          <th class="row-label" scope="row">Commit</th>
+          {% for g in groups %}<td>{% for c in g.commits %}<code>{{ c }}</code> {% endfor %}</td>{% endfor %}
+          {% else %}
+          <th class="row-label" scope="row">Build</th>
+          {% for g in groups %}<td>{{ g.builds|join(', ') }}</td>{% endfor %}
+          {% endif %}
+        </tr>
       </tbody>
     </table>
   </div>
@@ -102,15 +116,47 @@
 <div class="toast" id="toast">Link copied</div>
 
 <script>
+  const vids = Array.from(document.querySelectorAll('video.synced'));
+
+  document.getElementById('sync-play').addEventListener('click', () => {
+    vids.forEach(v => v.play());
+  });
+  document.getElementById('sync-pause').addEventListener('click', () => {
+    vids.forEach(v => v.pause());
+  });
+  document.getElementById('sync-restart').addEventListener('click', () => {
+    vids.forEach(v => { v.currentTime = 0; });
+  });
+
+  // When one video is seeked, jump the same video of the same test case in
+  // the other groups to match (videos of different test cases stay independent).
+  vids.forEach(v => {
+    v.addEventListener('seeked', () => {
+      vids.forEach(other => {
+        if (other !== v && other.dataset.sync === v.dataset.sync &&
+            Math.abs(other.currentTime - v.currentTime) > 0.2) {
+          other.currentTime = v.currentTime;
+        }
+      });
+    });
+  });
+
   const copyBtn = document.getElementById('copy-btn');
   const toast = document.getElementById('toast');
   copyBtn.addEventListener('click', async () => {
-    const input = document.getElementById('share-url');
+    const url = copyBtn.dataset.url;
     try {
-      await navigator.clipboard.writeText(input.value);
+      await navigator.clipboard.writeText(url);
     } catch (e) {
-      input.select();
+      // Fallback for non-secure (plain HTTP) origins: copy via a temporary off-screen field.
+      const tmp = document.createElement('textarea');
+      tmp.value = url;
+      tmp.style.position = 'fixed';
+      tmp.style.opacity = '0';
+      document.body.appendChild(tmp);
+      tmp.select();
       document.execCommand('copy');
+      tmp.remove();
     }
     toast.classList.add('show');
     setTimeout(() => toast.classList.remove('show'), 1400);

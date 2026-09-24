@@ -30,6 +30,7 @@ Run in production with gunicorn (see README.md):
 import functools
 import json
 import os
+import statistics
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from zoneinfo import ZoneInfo
@@ -191,6 +192,26 @@ def summarize(cases):
     }
 
 
+def stats_summary(cases):
+    """Mean and sample std of each numeric stats key across cases: {key: {'mean', 'std', 'n'}}.
+
+    Booleans and non-numeric values are ignored; std is None with fewer than two values.
+    """
+    values = {}
+    for c in cases:
+        for k, v in c["stats"]:
+            if isinstance(v, (int, float)) and not isinstance(v, bool):
+                values.setdefault(k, []).append(v)
+    return {
+        k: {
+            "mean": statistics.fmean(vs),
+            "std": statistics.stdev(vs) if len(vs) > 1 else None,
+            "n": len(vs),
+        }
+        for k, vs in values.items()
+    }
+
+
 def group_cases(cases, key):
     """Group cases (as returned by list_cases()) by meta[key], newest group first."""
     groups = {}
@@ -310,8 +331,13 @@ def compare_group():
     if not groups:
         abort(404, description=f"No valid {GROUP_KEYS[key].lower()}s selected.")
 
+    for g in groups:
+        g["stats_summary"] = stats_summary(g["cases"])
+    # One mean/std row per numeric stats key, in first-seen order across groups.
+    stat_keys = list(dict.fromkeys(k for g in groups for k in g["stats_summary"]))
+
     # One row per case folder name (<scenario>_<car type>_<dataset>), so the
-    # same test case lines up across groups; each cell lists that group's runs of it.
+    # same test case lines up across groups; each cell holds that group's runs of it.
     names = sorted({c["case"] for g in groups for c in g["cases"]}, key=str.lower)
     rows = []
     for name in names:
@@ -321,7 +347,7 @@ def compare_group():
                      "ids": [c["id"] for c in members]})
     return render_template(
         "compare_group.html", key=key, key_label=GROUP_KEYS[key],
-        groups=groups, rows=rows, share_url=request.url,
+        groups=groups, rows=rows, stat_keys=stat_keys, share_url=request.url,
     )
 
 

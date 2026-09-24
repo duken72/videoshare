@@ -7,10 +7,9 @@ with code in this repository.
 
 A tiny single-file Flask app: pick CI test cases from a folder on the
 server, hit **Compare**, and get a shareable link that lays them out side
-by side — one table column per case, its metadata as the header, its videos
-stacked below (synced play/pause/restart, best-effort synced scrubbing) and
-its `stats.json` rendered as a label/value list at the bottom. No database, no build step, no
-frontend framework — server-rendered Jinja templates plus vanilla JS.
+by side — one table column per case, with its metadata, its `stats.json`
+and its videos (synced play/pause/restart, best-effort synced scrubbing)
+as labeled rows. No database, no build step, no frontend framework — server-rendered Jinja templates plus vanilla JS.
 
 ## Commands
 
@@ -79,10 +78,11 @@ open redirect. Routes:
   query params and silently drops any that don't resolve to a real case
   (per entry, not a hard 404). Renders `templates/compare.html` as a table
   with a sticky label column on the left (row names appear only once) and
-  one column per case. The header is just the case title. Below it are
-  one row per metadata field, then one row per video index, then one row
-  per stats key (the union of keys across cases, in first-seen order;
-  cases missing a key get a blank cell). Videos align across cases by
+  one column per case. There is no header row. Rows, top to bottom:
+  Success, Scenario, Time, Car type; one row per stats key (the union of
+  keys across cases, in first-seen order; cases missing a key get a blank
+  cell); one row per video index (each labeled just "Video", with no
+  filename caption); then Build, Commit, Dataset. Videos align across cases by
   sorted-filename position, not by name, and cases with fewer videos get
   blank cells. The full request URL is the
   shareable link — state lives entirely in the query string, not a
@@ -90,14 +90,22 @@ open redirect. Routes:
 - `GET /compare/group?by=build_id|commit&g=<value>&g=...` (`compare_group`)
   — compares whole builds or commits (`GROUP_KEYS`), each spanning many
   cases/runs. Renders `templates/compare_group.html` with the same
-  left-hand label column as `/compare` and one column per group: rows
-  for "successful / total runs" (`summarize()`: a run is one
-  case, success is `container_success`; missing counts as unknown, not
-  successful), commits/builds, CI runs and latest time, then one row per
-  case folder name so the same test case
-  lines up across groups. Cells list that group's runs of the case with a
-  link to `/compare`; each row links to `/compare` with all its runs.
-  Unknown `g` values are skipped. No videos are embedded on this page.
+  left-hand label column as `/compare` and one column per group, and
+  likewise no header row. Rows, top to bottom: the group's own Build or
+  Commit value, "successful / total runs"
+  (`summarize()`: a run is one case, success is `container_success`;
+  missing counts as unknown, not successful), latest time, one row per
+  numeric stats key with its mean ± sample std over all the group's runs
+  (`stats_summary()`; booleans and strings are skipped), then
+  per case folder name (so the same test case lines up across groups) a
+  videos row (only the first is labeled "Videos") followed by a merged
+  full-width row with its scenario, car type and dataset and a link to `/compare` with all its runs, then
+  the other of Build/Commit (the list of builds or commits the group
+  spans). Unknown `g` values are skipped. Each Videos cell embeds only the
+  videos (no filename caption, no run list) of that group's newest run of
+  the case, with the same Play/Pause/Restart toolbar as `/compare`;
+  scrubbing only syncs videos of the same case and video index across
+  groups.
 - `GET /media/<run>/<case>/<filename>` (`media`) — streams the actual video via
   `send_from_directory(..., conditional=True)`, which is what makes HTTP
   Range requests (scrubbing/seeking) work.
@@ -135,6 +143,11 @@ binds to `127.0.0.1` only; nginx is what exposes it publicly. See
 Work directly on the current branch in the main checkout — no need to
 create a worktree or a new branch. Do **not** commit or push unless
 explicitly asked to; leave changes uncommitted for review.
+
+This applies to background jobs too: edit files in place on `main` — don't
+use EnterWorktree or make a patch for the user to apply. Background jobs are
+blocked from editing the shared checkout unless `.claude/settings.json`
+contains `"worktree": {"bgIsolation": "none"}`.
 
 Multiple sessions/conversations may be working on the same branch and
 checkout at the same time. Expect files to change underneath you: re-read

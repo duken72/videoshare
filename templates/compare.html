@@ -22,28 +22,13 @@
     <button id="sync-pause" class="secondary">Pause all</button>
     <button id="sync-restart" class="secondary">Restart all</button>
     <div class="share-box">
-      <input type="text" id="share-url" value="{{ share_url }}" readonly>
-      <button id="copy-btn" class="secondary">Copy link</button>
+      <button id="copy-btn" class="secondary" data-url="{{ share_url }}">Copy link</button>
     </div>
   </div>
 
   <div class="table-wrap">
     <table class="compare-table labeled">
-      <thead>
-        <tr>
-          <th class="row-label"></th>
-          {% for c in cases %}
-          <th><div class="case-title">{{ c.meta.scenario or c.case }}</div></th>
-          {% endfor %}
-        </tr>
-      </thead>
       <tbody>
-        <tr class="meta-row">
-          <th class="row-label" scope="row">Time</th>
-          {% for c in cases %}
-          <td class="times">{% for label, t in c.times.items() %}<div>{{ t or c.run }} ({{ label }})</div>{% endfor %}</td>
-          {% endfor %}
-        </tr>
         {% if has_success %}
         <tr class="meta-row">
           <th class="row-label" scope="row">Success</th>
@@ -55,47 +40,19 @@
         </tr>
         {% endif %}
         <tr class="meta-row">
-          <th class="row-label" scope="row">Build</th>
-          {% for c in cases %}<td>{{ c.meta.build_id }}</td>{% endfor %}
+          <th class="row-label" scope="row">Scenario</th>
+          {% for c in cases %}<td>{{ c.meta.scenario }}</td>{% endfor %}
         </tr>
         <tr class="meta-row">
-          <th class="row-label" scope="row">Commit</th>
-          {% for c in cases %}<td><code title="{{ c.meta.commit }}">{{ c.short_commit }}</code></td>{% endfor %}
+          <th class="row-label" scope="row">Time</th>
+          {% for c in cases %}
+          <td class="times">{% for label, t in c.times.items() %}<div>{{ t or c.run }} ({{ label }})</div>{% endfor %}</td>
+          {% endfor %}
         </tr>
         <tr class="meta-row">
           <th class="row-label" scope="row">Car type</th>
           {% for c in cases %}<td>{{ c.meta.car_type }}</td>{% endfor %}
         </tr>
-        <tr class="meta-row last">
-          <th class="row-label" scope="row">Dataset</th>
-          {% for c in cases %}<td>{{ c.meta.dataset }}</td>{% endfor %}
-        </tr>
-
-        {% for i in max_videos %}
-        <tr class="video-row">
-          <th class="row-label" scope="row">Video {{ i + 1 }}</th>
-          {% for c in cases %}
-          <td>
-            {% if i < c.videos|length %}
-            <div class="video-card">
-              <video class="synced" preload="metadata" controls muted playsinline>
-                <source src="{{ url_for('media', run=c.run, case=c.case, filename=c.videos[i]) }}">
-                Your browser doesn't support video playback.
-              </video>
-              <div class="caption">{{ c.videos[i] }}</div>
-            </div>
-            {% elif i == 0 %}
-            <span class="muted-note">no videos</span>
-            {% endif %}
-          </td>
-          {% endfor %}
-        </tr>
-        {% else %}
-        <tr class="video-row">
-          <th class="row-label" scope="row">Videos</th>
-          {% for c in cases %}<td><span class="muted-note">no videos</span></td>{% endfor %}
-        </tr>
-        {% endfor %}
 
         {% for key in stat_keys %}
         <tr class="stat-row{{ ' first' if loop.first }}">
@@ -116,6 +73,44 @@
           {% for c in cases %}<td><span class="muted-note">no stats</span></td>{% endfor %}
         </tr>
         {% endfor %}
+
+        {% for i in max_videos %}
+        <tr class="video-row">
+          <th class="row-label" scope="row">Video</th>
+          {% for c in cases %}
+          <td>
+            {% if i < c.videos|length %}
+            <div class="video-card">
+              <video class="synced" preload="metadata" controls muted playsinline>
+                <source src="{{ url_for('media', run=c.run, case=c.case, filename=c.videos[i]) }}">
+                Your browser doesn't support video playback.
+              </video>
+            </div>
+            {% elif i == 0 %}
+            <span class="muted-note">no videos</span>
+            {% endif %}
+          </td>
+          {% endfor %}
+        </tr>
+        {% else %}
+        <tr class="video-row">
+          <th class="row-label" scope="row">Video</th>
+          {% for c in cases %}<td><span class="muted-note">no videos</span></td>{% endfor %}
+        </tr>
+        {% endfor %}
+
+        <tr class="meta-row first">
+          <th class="row-label" scope="row">Build</th>
+          {% for c in cases %}<td>{{ c.meta.build_id }}</td>{% endfor %}
+        </tr>
+        <tr class="meta-row">
+          <th class="row-label" scope="row">Commit</th>
+          {% for c in cases %}<td><code title="{{ c.meta.commit }}">{{ c.short_commit }}</code></td>{% endfor %}
+        </tr>
+        <tr class="meta-row">
+          <th class="row-label" scope="row">Dataset</th>
+          {% for c in cases %}<td>{{ c.meta.dataset }}</td>{% endfor %}
+        </tr>
       </tbody>
     </table>
   </div>
@@ -149,12 +144,19 @@
   const copyBtn = document.getElementById('copy-btn');
   const toast = document.getElementById('toast');
   copyBtn.addEventListener('click', async () => {
-    const input = document.getElementById('share-url');
+    const url = copyBtn.dataset.url;
     try {
-      await navigator.clipboard.writeText(input.value);
+      await navigator.clipboard.writeText(url);
     } catch (e) {
-      input.select();
+      // Fallback for non-secure (plain HTTP) origins: copy via a temporary off-screen field.
+      const tmp = document.createElement('textarea');
+      tmp.value = url;
+      tmp.style.position = 'fixed';
+      tmp.style.opacity = '0';
+      document.body.appendChild(tmp);
+      tmp.select();
       document.execCommand('copy');
+      tmp.remove();
     }
     toast.classList.add('show');
     setTimeout(() => toast.classList.remove('show'), 1400);
