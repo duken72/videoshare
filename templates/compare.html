@@ -54,19 +54,32 @@
           {% for c in cases %}<td>{{ c.meta.car_type }}</td>{% endfor %}
         </tr>
 
-        {% for key in stat_keys %}
-        <tr class="stat-row{{ ' first' if loop.first }}">
+        {% macro stat_cell(present, value) %}
+        {% if not present %}<td></td>
+        {% elif value is none %}<td><span class="muted-note">&ndash;</span></td>
+        {% elif value is sameas true %}<td class="ok">&#10003; yes</td>
+        {% elif value is sameas false %}<td class="fail">&#10007; no</td>
+        {% elif value is mapping or (value is iterable and value is not string) %}<td>{{ value|tojson }}</td>
+        {% else %}<td>{{ value }}</td>{% endif %}
+        {% endmacro %}
+        {% for key, subkeys in stat_rows %}
+        <tr class="stat-row{{ ' first' if loop.first }}{{ ' stat-parent' if subkeys is not none }}">
           <th class="row-label" scope="row">{{ key }}</th>
           {% for c in cases %}
-          {% if key not in c.stats_by_key %}<td></td>
-          {% else %}{% set value = c.stats_by_key[key] %}
-          {% if value is sameas true %}<td class="ok">&#10003; yes</td>
-          {% elif value is sameas false %}<td class="fail">&#10007; no</td>
-          {% elif value is mapping or (value is iterable and value is not string) %}<td>{{ value|tojson }}</td>
-          {% else %}<td>{{ value }}</td>{% endif %}
-          {% endif %}
+          {% set value = c.stats.get(key) %}
+          {# A dict stat (e.g. metrics) gets an empty header row; its values go in the subrows below. #}
+          {{ stat_cell(key in c.stats and not (subkeys is not none and value is mapping), value) }}
           {% endfor %}
         </tr>
+        {% for sk in subkeys or [] %}
+        <tr class="stat-row stat-sub">
+          <th class="row-label" scope="row">{{ sk }}</th>
+          {% for c in cases %}
+          {% set value = c.stats.get(key) %}
+          {{ stat_cell(value is mapping and sk in value, value[sk] if value is mapping else none) }}
+          {% endfor %}
+        </tr>
+        {% endfor %}
         {% else %}
         <tr class="stat-row first">
           <th class="row-label" scope="row">Stats</th>
@@ -111,6 +124,15 @@
           <th class="row-label" scope="row">Dataset</th>
           {% for c in cases %}<td>{{ c.meta.dataset }}</td>{% endfor %}
         </tr>
+
+        {% for key in log_keys %}
+        <tr class="log-row">
+          <th class="row-label" scope="row">{{ key }}</th>
+          {% for c in cases %}
+          <td>{% if key in c.logs %}{% set lines = c.logs[key] %}<details class="log"><summary>Show log <span class="muted-note">({{ lines|length }} line{{ 's' if lines|length != 1 }})</span></summary><pre class="log">{{ lines|join('\n') }}</pre></details>{% endif %}</td>
+          {% endfor %}
+        </tr>
+        {% endfor %}
       </tbody>
     </table>
   </div>

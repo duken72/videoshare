@@ -152,10 +152,13 @@ def case_info(run_path, case_path):
         "videos": list_videos_in(case_path),
         # True/False, or None if the case's stats.json doesn't say.
         "success": stats.get("container_success"),
-        "stats": [
-            (k, v) for k, v in stats.items()
-            if k not in METADATA_KEYS and k not in HIDDEN_STATS_KEYS
-        ],
+        # List-valued keys (e.g. app_log) are logs, shown line by line at the
+        # bottom; everything else is a stat (a dict, e.g. metrics, gets subrows).
+        "stats": {
+            k: v for k, v in stats.items()
+            if k not in METADATA_KEYS and k not in HIDDEN_STATS_KEYS and not isinstance(v, list)
+        },
+        "logs": {k: v for k, v in stats.items() if isinstance(v, list)},
     }
 
 
@@ -192,16 +195,37 @@ def summarize(cases):
     }
 
 
-def stats_summary(cases):
-    """Mean and sample std of each numeric stats key across cases: {key: {'mean', 'std', 'n'}}.
+def stat_rows(stats_dicts):
+    """Lay out the stats rows for several cases' stats, in first-seen key order.
 
-    Booleans and non-numeric values are ignored; std is None with fewer than two values.
+    Returns [(key, None)] for a plain value, or [(key, [subkey, ...])] for a
+    dict (e.g. metrics), which is shown as a row per subkey.
+    """
+    rows = {}
+    for stats in stats_dicts:
+        for k, v in stats.items():
+            subs = rows.setdefault(k, None)
+            if isinstance(v, dict):
+                if subs is None:
+                    subs = rows[k] = {}
+                subs.update(dict.fromkeys(v))
+    return [(k, list(subs) if subs is not None else None) for k, subs in rows.items()]
+
+
+def stats_summary(cases):
+    """Mean and sample std of each numeric stat across cases: {(key, subkey): {'mean', 'std', 'n'}}.
+
+    subkey is None for top-level stats, or the key inside a dict stat (e.g.
+    metrics). Booleans and non-numeric values are ignored; std is None with
+    fewer than two values.
     """
     values = {}
     for c in cases:
-        for k, v in c["stats"]:
-            if isinstance(v, (int, float)) and not isinstance(v, bool):
-                values.setdefault(k, []).append(v)
+        for k, v in c["stats"].items():
+            items = v.items() if isinstance(v, dict) else [(None, v)]
+            for sk, sv in items:
+                if isinstance(sv, (int, float)) and not isinstance(sv, bool):
+                    values.setdefault((k, sk), []).append(sv)
     return {
         k: {
             "mean": statistics.fmean(vs),
@@ -305,15 +329,15 @@ def compare():
     max_videos = max(len(c["videos"]) for c in cases)
     # One stats row per key, in first-seen order across cases, so the labels
     # can be shown once on the left; cases missing a key get a blank cell.
-    stat_keys = list(dict.fromkeys(k for c in cases for k, _ in c["stats"]))
-    for c in cases:
-        c["stats_by_key"] = dict(c["stats"])
+    rows = stat_rows(c["stats"] for c in cases)
+    log_keys = list(dict.fromkeys(k for c in cases for k in c["logs"]))
     share_url = request.url
     return render_template(
         "compare.html",
         cases=cases,
         max_videos=range(max_videos),
-        stat_keys=stat_keys,
+        stat_rows=rows,
+        log_keys=log_keys,
         has_success=any(c["success"] is not None for c in cases),
         share_url=share_url,
     )
@@ -333,8 +357,15 @@ def compare_group():
 
     for g in groups:
         g["stats_summary"] = stats_summary(g["cases"])
-    # One mean/std row per numeric stats key, in first-seen order across groups.
-    stat_keys = list(dict.fromkeys(k for g in groups for k in g["stats_summary"]))
+    # One mean/std row per numeric stat, in first-seen order across groups.
+    summarized = {k for g in groups for k in g["stats_summary"]}
+    srows = []
+    for k, subs in stat_rows(c["stats"] for g in groups for c in g["cases"]):
+        if subs is None:
+            if (k, None) in summarized:
+                srows.append((k, None))
+        elif subs := [sk for sk in subs if (k, sk) in summarized]:
+            srows.append((k, subs))
 
     # One row per case folder name (<scenario>_<car type>_<dataset>), so the
     # same test case lines up across groups; each cell holds that group's runs of it.
@@ -344,10 +375,17 @@ def compare_group():
         cells = [[c for c in g["cases"] if c["case"] == name] for g in groups]
         members = [c for cell in cells for c in cell]
         rows.append({"name": name, "meta": members[0]["meta"], "cells": cells,
-                     "ids": [c["id"] for c in members]})
+                     "ids": [c["id"] for c in members],
+                     # Log keys of the newest run in each group, the one whose videos/logs are shown.
+                     "log_keys": {k for cell in cells if cell for k in cell[0]["logs"]}})
+    # Logs of each group's newest run of each case, shown at the bottom.
+    log_keys = list(dict.fromkeys(
+        k for g in groups for c in g["cases"] for k in c["logs"]
+        if any(k in row["log_keys"] for row in rows)
+    ))
     return render_template(
         "compare_group.html", key=key, key_label=GROUP_KEYS[key],
-        groups=groups, rows=rows, stat_keys=stat_keys, share_url=request.url,
+        groups=groups, rows=rows, stat_rows=srows, log_keys=log_keys, share_url=request.url,
     )
 
 

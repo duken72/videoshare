@@ -46,7 +46,12 @@ fallback for the run-level fields when `stats.json` is missing.
 UTC run timestamp, plus it converted to each zone in `TIMEZONES`: DE =
 Europe/Berlin, VN = Asia/Ho_Chi_Minh), short commit, videos, and `stats`,
 which holds the `stats.json` keys that aren't metadata or in
-`HIDDEN_STATS_KEYS`. On the compare page the first metadata row is Time,
+`HIDDEN_STATS_KEYS`, as a dict, plus `logs`: the list-valued keys (e.g.
+`app_log`), which are kept out of `stats`. `stat_rows()` lays out the stats
+rows: a dict-valued stat (e.g. `metrics`) becomes a header row plus one
+subrow per inner key. Logs are shown last on all compare pages, one entry
+per line in a scrollable `<pre>`, collapsed by default in a
+`<details class="log">` ("Show log (N lines)"). On the compare page the first metadata row is Time,
 listing the UTC, DE and VN times on aligned lines. `container_success`
 is pulled out as `success` and shown right after it. A case is listed (`is_case()`)
 if it has a video *or* a `stats.json`, so failed runs with no video still
@@ -81,8 +86,9 @@ open redirect. Routes:
   one column per case. There is no header row. Rows, top to bottom:
   Success, Scenario, Time, Car type; one row per stats key (the union of
   keys across cases, in first-seen order; cases missing a key get a blank
-  cell); one row per video index (each labeled just "Video", with no
-  filename caption); then Build, Commit, Dataset. Videos align across cases by
+  cell; dict stats like `metrics` get a subrow per inner key); one row
+  per video index (each labeled just "Video", with no filename caption);
+  then Build, Commit, Dataset, then one row per log key (e.g. `app_log`). Videos align across cases by
   sorted-filename position, not by name, and cases with fewer videos get
   blank cells. The full request URL is the
   shareable link — state lives entirely in the query string, not a
@@ -95,13 +101,16 @@ open redirect. Routes:
   Commit value, "successful / total runs"
   (`summarize()`: a run is one case, success is `container_success`;
   missing counts as unknown, not successful), latest time, one row per
-  numeric stats key with its mean ± sample std over all the group's runs
-  (`stats_summary()`; booleans and strings are skipped), then
+  numeric stat with its mean ± sample std over all the group's runs
+  (`stats_summary()`, keyed by `(key, subkey)` so `metrics` values get
+  subrows; booleans and strings are skipped), then
   per case folder name (so the same test case lines up across groups) a
   videos row (only the first is labeled "Videos") followed by a merged
   full-width row with its scenario, car type and dataset and a link to `/compare` with all its runs, then
   the other of Build/Commit (the list of builds or commits the group
-  spans). Unknown `g` values are skipped. Each Videos cell embeds only the
+  spans), and last, per case folder name, a row per log key with the log
+  of each group's newest run of that case plus a caption row naming the
+  case. Unknown `g` values are skipped. Each Videos cell embeds only the
   videos (no filename caption, no run list) of that group's newest run of
   the case, with the same Play/Pause/Restart toolbar as `/compare`;
   scrubbing only syncs videos of the same case and video index across

@@ -558,3 +558,42 @@ main.wide {
 .group-video + .group-video {
   margin-top: 8px;
 }
+
+/* Compare pages: a dict stat (e.g. metrics) as a header row plus indented subrows. */
+.compare-table.labeled .stat-parent td {
+  border-bottom: none;
+}
+
+.compare-table.labeled .stat-sub th.row-label {
+  padding-left: 14px;
+}
+
+/* Logs (list-valued stats, e.g. app_log), one line per entry, at the bottom. */
+.compare-table.labeled .log-row > * {
+  padding-top: 22px;
+}
+
+pre.log {
+  margin: 0;
+  max-height: 28em;
+  overflow: auto;
+  padding: 10px 12px;
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  font-size: 0.78rem;
+  line-height: 1.45;
+  white-space: pre;
+}
+
+/* Logs are collapsed by default; the summary toggles them. */
+details.log > summary {
+  cursor: pointer;
+  color: var(--accent);
+  font-size: 0.85rem;
+  user-select: none;
+}
+
+details.log[open] > summary {
+  margin-bottom: 6px;
+}

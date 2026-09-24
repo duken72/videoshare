@@ -50,14 +50,27 @@
           <td class="times">{% for label, t in g.times.items() %}<div>{{ t }} ({{ label }})</div>{% endfor %}</td>
           {% endfor %}
         </tr>
-        {% for skey in stat_keys %}
+        {% macro summary_cell(st) %}
+        <td>{% if st %}{{ '%.4g'|format(st.mean) }} ± {{ '%.4g'|format(st.std) if st.std is not none else '–' }} <span class="muted-note">n={{ st.n }}</span>{% endif %}</td>
+        {% endmacro %}
+        {% for skey, subkeys in stat_rows %}
+        {% if subkeys is none %}
         <tr class="stat-row{{ ' first' if loop.first }}">
           <th class="row-label" scope="row">{{ skey }} <span class="muted-note">mean ± std</span></th>
-          {% for g in groups %}
-          {% set st = g.stats_summary.get(skey) %}
-          <td>{% if st %}{{ '%.4g'|format(st.mean) }} ± {{ '%.4g'|format(st.std) if st.std is not none else '–' }} <span class="muted-note">n={{ st.n }}</span>{% endif %}</td>
-          {% endfor %}
+          {% for g in groups %}{{ summary_cell(g.stats_summary.get((skey, none))) }}{% endfor %}
         </tr>
+        {% else %}
+        <tr class="stat-row stat-parent{{ ' first' if loop.first }}">
+          <th class="row-label" scope="row">{{ skey }} <span class="muted-note">mean ± std</span></th>
+          {% for g in groups %}<td></td>{% endfor %}
+        </tr>
+        {% for sk in subkeys %}
+        <tr class="stat-row stat-sub">
+          <th class="row-label" scope="row">{{ sk }}</th>
+          {% for g in groups %}{{ summary_cell(g.stats_summary.get((skey, sk))) }}{% endfor %}
+        </tr>
+        {% endfor %}
+        {% endif %}
         {% else %}
         <tr class="stat-row first">
           <th class="row-label" scope="row">Stats</th>
@@ -109,6 +122,27 @@
           {% for g in groups %}<td>{{ g.builds|join(', ') }}</td>{% endfor %}
           {% endif %}
         </tr>
+        {# Logs of each group's newest run of each test case, captioned like the videos above. #}
+        {% for key in log_keys %}
+        {% for row in rows %}
+        {% if key in row.log_keys %}
+        <tr class="log-row">
+          <th class="row-label" scope="row">{{ key }}</th>
+          {% for cell in row.cells %}
+          <td>{% if cell and key in cell[0].logs %}{% set lines = cell[0].logs[key] %}<details class="log"><summary>Show log <span class="muted-note">({{ lines|length }} line{{ 's' if lines|length != 1 }})</span></summary><pre class="log">{{ lines|join('\n') }}</pre></details>{% endif %}</td>
+          {% endfor %}
+        </tr>
+        <tr class="case-info-row">
+          <th class="row-label"></th>
+          <td class="case-info" colspan="{{ groups|length }}">
+            <span><span class="muted-note">Scenario</span> {{ row.meta.scenario }}</span>
+            <span><span class="muted-note">Car type</span> {{ row.meta.car_type }}</span>
+            <span><span class="muted-note">Dataset</span> {{ row.meta.dataset or row.name }}</span>
+          </td>
+        </tr>
+        {% endif %}
+        {% endfor %}
+        {% endfor %}
       </tbody>
     </table>
   </div>
