@@ -10,22 +10,58 @@
 <header class="header-row">
   <div>
     <h1>Video Compare</h1>
-    <p>Serving from <code>{{ video_dir }}</code> — pick run folders, then share the link.</p>
+    <p>Serving from <code>{{ video_dir }}</code> — pick test cases, then share the link.</p>
   </div>
   <form class="logout-form" method="post" action="{{ url_for('logout') }}">
     <button type="submit" class="secondary">Log out</button>
   </form>
 </header>
-<main>
-  {% if folders %}
-  <form id="picker" action="/compare" method="get">
-    <input type="text" id="folder-filter" class="folder-filter" placeholder="Filter folders…" autocomplete="off">
-    <select name="f" id="folder-select" class="folder-select" multiple size="12">
-      {% for f in folders %}
-      <option value="{{ f }}">{{ f }}</option>
+<main class="wide">
+  {% if cases %}
+  <form id="picker" action="{{ url_for('compare') }}" method="get">
+    <div class="filters">
+      <input type="text" id="case-filter" class="folder-filter" placeholder="Filter by anything (commit, dataset, …)" autocomplete="off">
+      {% for key, label in [('build_id', 'Build'), ('scenario', 'Scenario'), ('car_type', 'Car type'), ('dataset', 'Dataset')] %}
+      <select class="folder-filter column-filter" data-key="{{ key }}">
+        <option value="">All {{ label|lower }}s</option>
+        {% for v in cases|map(attribute='meta.' ~ key)|reject('equalto', '')|unique|sort %}
+        <option value="{{ v }}">{{ v }}</option>
+        {% endfor %}
+      </select>
       {% endfor %}
-    </select>
-    <p class="select-hint">Ctrl/Cmd-click (or Shift-click for a range) to select multiple folders.</p>
+    </div>
+    <div class="table-wrap">
+      <table class="case-table">
+        <thead>
+          <tr>
+            <th><input type="checkbox" id="select-visible" title="Select all shown"></th>
+            <th>Time (UTC)</th>
+            <th>Build</th>
+            <th>Commit</th>
+            <th>Scenario</th>
+            <th>Car type</th>
+            <th>Dataset</th>
+            <th>Videos</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for c in cases %}
+          <tr data-build_id="{{ c.meta.build_id }}" data-scenario="{{ c.meta.scenario }}"
+              data-car_type="{{ c.meta.car_type }}" data-dataset="{{ c.meta.dataset }}"
+              data-search="{{ (c.id ~ ' ' ~ c.meta.values()|join(' '))|lower }}">
+            <td><input type="checkbox" name="f" value="{{ c.id }}"></td>
+            <td class="nowrap">{{ c.time or c.run }}</td>
+            <td>{{ c.meta.build_id }}</td>
+            <td><code title="{{ c.meta.commit }}">{{ c.short_commit }}</code></td>
+            <td>{{ c.meta.scenario or c.case }}</td>
+            <td class="nowrap">{{ c.meta.car_type }}</td>
+            <td class="truncate" title="{{ c.meta.dataset }}">{{ c.meta.dataset }}</td>
+            <td>{% if c.videos %}{{ c.videos|length }}{% else %}<span class="muted-note">none</span>{% endif %}</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
     <div class="toolbar">
       <button type="submit">Compare selected</button>
       <span id="count" style="color: var(--muted); font-size: 0.88rem;"></span>
@@ -33,30 +69,58 @@
   </form>
   {% else %}
   <div class="empty-state">
-    No run folders found yet. Each folder should sit directly inside the configured
-    <code>VIDEO_DIR</code> and contain video files ({{ '.mp4, .webm, .mov, .mkv' }}), plus
-    an optional stats CSV. Add one and reload this page.
+    No test cases found yet. Expected layout inside the configured <code>VIDEO_DIR</code>:
+    <code>&lt;timestamp&gt;_&lt;build ID&gt;_&lt;commit&gt;/&lt;scenario&gt;_&lt;car type&gt;_&lt;dataset&gt;/</code>,
+    each case folder holding its video files ({{ '.mp4, .webm, .mov, .mkv' }}) and a
+    <code>stats.json</code>. Add one and reload this page.
   </div>
   {% endif %}
 </main>
 <script>
-  const select = document.getElementById('folder-select');
-  const filter = document.getElementById('folder-filter');
+  const rows = Array.from(document.querySelectorAll('.case-table tbody tr'));
+  const textFilter = document.getElementById('case-filter');
+  const columnFilters = Array.from(document.querySelectorAll('.column-filter'));
+  const selectVisible = document.getElementById('select-visible');
   const count = document.getElementById('count');
+  const box = row => row.querySelector('input[name="f"]');
 
   function updateCount() {
-    const n = select.selectedOptions.length;
+    const n = rows.filter(r => box(r).checked).length;
     count.textContent = n ? `${n} selected` : '';
   }
-  select.addEventListener('change', updateCount);
-  updateCount();
 
-  filter.addEventListener('input', () => {
-    const q = filter.value.trim().toLowerCase();
-    Array.from(select.options).forEach(opt => {
-      opt.hidden = q !== '' && !opt.value.toLowerCase().includes(q);
+  function applyFilters() {
+    const q = textFilter.value.trim().toLowerCase();
+    rows.forEach(row => {
+      const matches = (q === '' || row.dataset.search.includes(q)) &&
+        columnFilters.every(s => s.value === '' || row.dataset[s.dataset.key] === s.value);
+      row.hidden = !matches;
     });
+    selectVisible.checked = false;
+  }
+
+  // Clicking anywhere on a row toggles its checkbox.
+  rows.forEach(row => row.addEventListener('click', e => {
+    if (e.target.tagName !== 'INPUT') box(row).checked = !box(row).checked;
+    row.classList.toggle('selected', box(row).checked);
+    updateCount();
+  }));
+
+  selectVisible.addEventListener('change', () => {
+    rows.filter(r => !r.hidden).forEach(r => {
+      box(r).checked = selectVisible.checked;
+      r.classList.toggle('selected', selectVisible.checked);
+    });
+    updateCount();
   });
+
+  textFilter.addEventListener('input', applyFilters);
+  columnFilters.forEach(s => s.addEventListener('change', applyFilters));
+
+  // Restore state after browser back-navigation (checkboxes may be kept).
+  rows.forEach(r => r.classList.toggle('selected', box(r).checked));
+  applyFilters();
+  updateCount();
 </script>
 </body>
 </html>

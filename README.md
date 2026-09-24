@@ -1,11 +1,11 @@
 # videoshare
 
 A tiny `Flask` app allowing to access and compare data of test runs on a
-remote server. The data is in specified directory, under which are
-subforders. Each subfolder corresponds to the data of a test run,
-including videos and its stats CSV. Users can pick test runs to compare.
-The app shows them side by side — one column per runs, its videos stacked
-on top and its stats CSV rendered below (with synced play / pause / restart,
+remote server. The data is organised as CI run folders, each containing one
+subfolder per test case with its videos and a `stats.json`. Users can pick
+test cases to compare. The app shows them side by side — one column per
+case, with its metadata as the header, its videos stacked below that, and
+its stats at the bottom (with synced play / pause / restart,
 and reasonably in-sync scrubbing).
 
 ## Table of Contents
@@ -49,41 +49,71 @@ videoshare/
 
 ### Where to place the data
 
-By default it looks for a `test-results/` folder in your home directory
-(`~/test-results`).
-Either put your run folders there, or point `VIDEO_DIR` at wherever they
-already live:
+By default it looks for a `ci-results/` folder in your home directory
+(`~/ci-results`). Point `VIDEO_DIR` elsewhere if the CI results live
+somewhere else:
 
 ```bash
-export VIDEO_DIR=/path/to/your/runs
+export VIDEO_DIR=/path/to/ci-results
 ```
 
-Each **immediate subfolder** of `VIDEO_DIR` is one selectable "run" / test — it
-should contain:
+The data is two levels deep: one folder per **CI run**, and inside it one
+folder per **test case**. Each test case is one selectable column.
 
-- one or more video files (`.mp4 .webm .ogg .mov .m4v .mkv` out of the box —
-  edit `ALLOWED_EXTENSIONS` in `app.py` to add more), and
-- optionally, a `.csv` file with two columns (`label,value` per row) — its
-  rows are shown as stats under that folder's videos on the compare page.
+- Run folder: `<UTC timestamp>_<build ID>_<commit hash>`, e.g.
+  `20260923_122816Z_LOCAL_01c35f89e`.
+- Test case folder: `<scenario>_<car type>_<dataset>`, e.g.
+  `sim_withCtl_EU-VF6-03_sim`.
+
+Each test case folder holds:
+
+- zero or more video files (`.mp4 .webm .ogg .mov .m4v .mkv` out of the
+  box — edit `ALLOWED_EXTENSIONS` in `app.py` to add more), and
+- a `stats.json` with the case's metadata and stats.
 
 ```
-videos/
-├── run_1/
-│   ├── vid1.mp4
-│   ├── vid2.mp4
-│   └── stats.csv
-└── run_2/
-    ├── vid1.mp4
-    ├── vid2.mp4
-    └── stats.csv
+ci-results/
+├── 20260923_122816Z_LOCAL_01c35f89e/
+│   └── real_withCtl_EU-VF6-03_<dataset>/
+│       ├── vparking_app.mp4
+│       └── stats.json
+└── 20260923_132430Z_NIGHTLY_ff0921028/
+    ├── real_withoutCtl_EU-VF6-03_<dataset>/
+    │   ├── vparking_app.mp4
+    │   └── stats.json
+    └── sim_perpendicularParking_EU-VF6-03_sim/
+        ├── vparking_app.mp4
+        └── stats.json
 ```
 
-Videos are matched across folders by sorted filename order (row 1 = each
-folder's first video alphabetically, and so on) — name videos consistently
-across folders (e.g. `cam_front.mp4`, `cam_rear.mp4` in every folder) so the
-rows line up meaningfully. Folders can have different numbers of videos;
-missing cells are just left blank. If a folder has more than one `.csv`
-file, the first one alphabetically is used.
+```json
+{
+  "build_id": "LOCAL",
+  "commit": "01c35f89e15201db0e1a1e0c9bca8d5c61ba55ec",
+  "run_timestamp": "20260923_122816Z",
+  "scenario": "real_withCtl",
+  "car_type": "EU-VF6-03",
+  "dataset": "20260906_000000_Log13_..._compressed",
+  "container_success": true
+}
+```
+
+The metadata (timestamp, build, commit, scenario, car type, dataset) is
+read from `stats.json` rather than parsed from folder names, because
+scenario names contain underscores (`real_withCtl`) and so do dataset
+names. If a case has no `stats.json`, the timestamp, build and commit fall
+back to what the run folder name gives. The picker shows these as columns
+you can filter on. On the compare page, `container_success` is shown as
+✓/✗ in the first row of each column's header, above the videos. Every
+other key in `stats.json` appears in the stats list under the videos.
+
+A case folder is listed if it has at least one video or a `stats.json`.
+This means failed runs with no video can still be compared by their stats.
+
+Videos are matched across cases by sorted filename order (row 1 = each
+case's first video alphabetically, and so on). Name videos consistently
+across cases so the rows line up meaningfully. Cases can have different
+numbers of videos; missing cells are left blank.
 
 ## Local development setup
 
@@ -96,10 +126,10 @@ python3 app.py
 ```
 
 Visit `http://YOUR_SERVER_IP:5000` (you may need to open the port: `sudo ufw allow 5000/tcp`).
-Check a few boxes, click **Compare selected**, and you'll land on a URL like:
+Tick a few test cases, click **Compare selected**, and you'll land on a URL like:
 
 ```
-http://YOUR_SERVER_IP:5000/compare?f=run_a&f=run_b
+http://YOUR_SERVER_IP:5000/compare?f=<run>/<case>&f=<run>/<case>
 ```
 
 If you open the service publicly, it would be visible to anyone who opens it, they sees the same comparison using that URL.
@@ -275,16 +305,16 @@ see the traffic.
 
 ## How sharing works
 
-`/compare` reads repeated `?f=foldername` query params, validates each name
-resolves to an immediate subfolder of `VIDEO_DIR` (path traversal and nested
-folders are blocked), and renders one table column per folder: its videos
-(streamed from `/media/<folder>/<filename>`, which supports HTTP Range
-requests so scrubbing/seeking works normally) stacked in sorted filename
-order, with its stats CSV rendered as a label/value list underneath.
+`/compare` reads repeated `?f=<run>/<case>` query params. It checks that
+each one resolves to exactly `VIDEO_DIR/<run>/<case>` (path traversal and
+other nesting are blocked) and renders one table column per case. The
+column header shows the case's metadata. Below it are the case's videos in
+sorted filename order, streamed from `/media/<run>/<case>/<filename>`,
+which supports HTTP Range requests so scrubbing and seeking work normally.
+At the bottom, the rest of `stats.json` is shown as a label/value list.
 
 ## TODO
 
 - Include tags to filter
     - perception
     - motion-planning
-- Naming convention: <YYMMDD>-<dataset>-<commit>

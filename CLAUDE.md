@@ -5,11 +5,11 @@ with code in this repository.
 
 ## What this is
 
-A tiny single-file Flask app: pick run folders from a folder on the server,
-hit **Compare**, and get a shareable link that lays them out side by side —
-one table column per folder, its videos stacked on top (synced
-play/pause/restart, best-effort synced scrubbing) and its stats CSV
-rendered as a label/value list below. No database, no build step, no
+A tiny single-file Flask app: pick CI test cases from a folder on the
+server, hit **Compare**, and get a shareable link that lays them out side
+by side — one table column per case, its metadata as the header, its videos
+stacked below (synced play/pause/restart, best-effort synced scrubbing) and
+its `stats.json` rendered as a label/value list at the bottom. No database, no build step, no
 frontend framework — server-rendered Jinja templates plus vanilla JS.
 
 ## Commands
@@ -25,7 +25,7 @@ python3 app.py
 gunicorn -w 2 -b 0.0.0.0:5000 app:app
 ```
 
-Configure via env vars (see top of `app.py`): `VIDEO_DIR` (default `~/test-results`),
+Configure via env vars (see top of `app.py`): `VIDEO_DIR` (default `~/ci-results`),
 `HOST` (default `0.0.0.0`), `PORT` (default `5000`), `APP_PASSWORD` (default
 `adas123` — the login password), `SECRET_KEY` (session-cookie signing key).
 
@@ -33,47 +33,61 @@ There are no automated tests, linter, or build tooling in this repo.
 
 ## Architecture
 
-The data model is folder-based: each **immediate subfolder** of `VIDEO_DIR`
-is one selectable "run," expected to contain one or more videos plus an
-optional stats `.csv` (two columns: label, value). Everything server-side
-lives in `app.py`. Every route except `/login` is wrapped in
-`@login_required`, which checks `session["authenticated"]` (set by
-`/login` after checking `request.form["password"]` against `APP_PASSWORD`)
-and redirects to `/login?next=<original path>` otherwise; `next` is
-validated to be a same-site relative path to avoid becoming an open
-redirect. Routes:
+The data model is two levels of folders:
+`VIDEO_DIR/<run>/<case>/`. A **run** folder is named
+`<UTC timestamp>_<build ID>_<commit>` (e.g. `20260923_122816Z_LOCAL_01c35f89e`).
+A **case** folder inside it is named `<scenario>_<car type>_<dataset>` (e.g.
+`sim_withCtl_EU-VF6-03_sim`). Each case folder holds zero or more videos
+plus a `stats.json`. Cases, not runs, are the selectable unit, identified
+as `"<run>/<case>"`. Scenario and dataset names contain underscores, so
+the metadata (`METADATA_KEYS`: run_timestamp, build_id, commit, scenario,
+car_type, dataset) comes from `stats.json`. `parse_run_name()` is only a
+fallback for the run-level fields when `stats.json` is missing.
+`case_info()` builds the dict the templates use: id, meta, formatted time,
+short commit, videos, and `stats`, which holds the `stats.json` keys that
+aren't metadata. `container_success` is pulled out as `success` and shown as the
+first row of the compare column header. A case is listed (`is_case()`)
+if it has a video *or* a `stats.json`, so failed runs with no video still
+show up.
+
+Everything server-side lives in `app.py`. Every route except `/login` is
+wrapped in `@login_required`, which checks `session["authenticated"]` (set
+by `/login` after checking `request.form["password"]` against
+`APP_PASSWORD`) and redirects to `/login?next=<original path>` otherwise;
+`next` is validated to be a same-site relative path to avoid becoming an
+open redirect. Routes:
 
 - `GET/POST /login` (`login`) — renders the password form
   (`templates/login.html`, which also shows `CONTACT_EMAILS` as a "need
   access?" link) and, on a correct password, sets the session cookie and
   redirects to `next` (or `/`).
 - `POST /logout` (`logout`) — clears the session.
-- `GET /` (`index`) — lists immediate subfolders of `VIDEO_DIR` that contain
-  at least one video via `list_folders()`, renders the picker
-  (`templates/index.html`): a native `<select multiple>` (scales to many
-  folders better than a checkbox list) with a JS-driven text filter above it
-  that hides non-matching `<option>`s client-side.
-- `GET /compare?f=<folder>&f=<folder>...` (`compare`) — takes repeated `f`
-  query params, silently drops any that don't resolve to a real folder with
-  videos (per-entry, not a hard 404), and for each surviving folder gathers
-  its videos (`list_videos_in()`, sorted filename order) and stats
-  (`read_stats(csv_in(folder))`). Renders `templates/compare.html` as a
-  table: one column per folder, one row per video index (videos align
-  across folders by sorted-filename position, not by name — folders with
-  fewer videos just get blank cells at the bottom), plus a final stats row.
-  The full request URL is the shareable link — state lives entirely in the
-  query string, not a database.
-- `GET /media/<folder>/<filename>` (`media`) — streams the actual video via
+- `GET /` (`index`) — lists every case via `list_cases()`, newest run
+  first, and renders the picker (`templates/index.html`). The picker is a
+  table with one checkbox row per case and columns for time, build,
+  commit, scenario, car type, dataset and video count. Above it are a free
+  text filter and dropdown filters for build, scenario, car type and
+  dataset. All filtering happens client-side by hiding rows.
+- `GET /compare?f=<run>/<case>&f=...` (`compare`) — takes repeated `f`
+  query params and silently drops any that don't resolve to a real case
+  (per entry, not a hard 404). Renders `templates/compare.html` as a table
+  with one column per case. The header shows the case's metadata, then
+  there is one row per video index. Videos align across cases by
+  sorted-filename position, not by name, and cases with fewer videos get
+  blank cells. A final row shows the stats. The full request URL is the
+  shareable link — state lives entirely in the query string, not a
+  database.
+- `GET /media/<run>/<case>/<filename>` (`media`) — streams the actual video via
   `send_from_directory(..., conditional=True)`, which is what makes HTTP
   Range requests (scrubbing/seeking) work.
 
-**Path safety**: `safe_folder_for()` and `safe_path_for()` are the
-chokepoints all filesystem access goes through — both run
-`secure_filename()` then require the resolved path's *immediate* parent to
-be `VIDEO_DIR` (for folders) or the folder itself (for files) before
-returning it. This blocks both path traversal and picking a nested/grandchild
-folder as if it were a top-level run. `/compare` and `/media` both depend on
-this; don't bypass it when adding new routes that touch `VIDEO_DIR`.
+**Path safety**: `safe_child()` is the chokepoint all filesystem access
+goes through. It runs `secure_filename()`, then requires the resolved
+path's *immediate* parent to be the expected parent directory.
+`safe_case_for(run, case)` applies it twice (`VIDEO_DIR` → run → case), and
+`/media` applies it once more for the file. This blocks path traversal
+and any other nesting depth. `/compare` and `/media` both depend on this;
+don't bypass it when adding new routes that touch `VIDEO_DIR`.
 
 **Sync behavior is client-side only** (in `templates/compare.html`): the
 toolbar buttons iterate all `video.synced` elements directly, and a

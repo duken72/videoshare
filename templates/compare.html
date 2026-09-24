@@ -3,20 +3,20 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Comparing {{ folders|length }} folder{{ 's' if folders|length != 1 else '' }}</title>
+<title>Comparing {{ cases|length }} test case{{ 's' if cases|length != 1 else '' }}</title>
 <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
 </head>
 <body>
 <header class="header-row">
   <div>
-    <h1>Comparing {{ folders|length }} folder{{ 's' if folders|length != 1 else '' }}</h1>
+    <h1>Comparing {{ cases|length }} test case{{ 's' if cases|length != 1 else '' }}</h1>
     <p><a href="/" style="color: var(--accent); text-decoration: none;">&larr; back to picker</a></p>
   </div>
   <form class="logout-form" method="post" action="{{ url_for('logout') }}">
     <button type="submit" class="secondary">Log out</button>
   </form>
 </header>
-<main>
+<main class="wide">
   <div class="compare-toolbar">
     <button id="sync-play" class="secondary">Play all</button>
     <button id="sync-pause" class="secondary">Pause all</button>
@@ -31,41 +31,65 @@
     <table class="compare-table">
       <thead>
         <tr>
-          {% for f in folders %}
-          <th>{{ f.name }}</th>
+          {% for c in cases %}
+          <th>
+            <div class="case-title">{{ c.meta.scenario or c.case }}</div>
+            <dl class="case-meta">
+              {% if c.success is not none %}
+              <dt>Success</dt>
+              {% if c.success %}<dd class="ok">&#10003; yes</dd>{% else %}<dd class="fail">&#10007; no</dd>{% endif %}
+              {% endif %}
+              <dt>Time</dt><dd>{{ c.time or c.run }}</dd>
+              <dt>Build</dt><dd>{{ c.meta.build_id }}</dd>
+              <dt>Commit</dt><dd><code title="{{ c.meta.commit }}">{{ c.short_commit }}</code></dd>
+              <dt>Car type</dt><dd>{{ c.meta.car_type }}</dd>
+              <dt>Dataset</dt><dd>{{ c.meta.dataset }}</dd>
+            </dl>
+          </th>
           {% endfor %}
         </tr>
       </thead>
       <tbody>
         {% for i in max_videos %}
         <tr>
-          {% for f in folders %}
+          {% for c in cases %}
           <td>
-            {% if i < f.videos|length %}
+            {% if i < c.videos|length %}
             <div class="video-card">
               <video class="synced" preload="metadata" controls muted playsinline>
-                <source src="{{ url_for('media', folder=f.name, filename=f.videos[i]) }}">
+                <source src="{{ url_for('media', run=c.run, case=c.case, filename=c.videos[i]) }}">
                 Your browser doesn't support video playback.
               </video>
-              <div class="caption">{{ f.videos[i] }}</div>
+              <div class="caption">{{ c.videos[i] }}</div>
             </div>
             {% endif %}
           </td>
           {% endfor %}
         </tr>
         {% endfor %}
+        {% if not max_videos %}
+        <tr>
+          {% for c in cases %}<td><span class="muted-note">no videos</span></td>{% endfor %}
+        </tr>
+        {% endif %}
         <tr class="stats-row">
-          {% for f in folders %}
+          {% for c in cases %}
           <td>
-            {% if f.stats %}
+            {% if not c.videos and max_videos %}
+            <p class="muted-note">no videos</p>
+            {% endif %}
+            {% if c.stats %}
             <dl class="stats">
-              {% for label, value in f.stats %}
+              {% for label, value in c.stats %}
               <dt>{{ label }}</dt>
-              <dd>{{ value }}</dd>
+              {% if value is sameas true %}<dd class="ok">&#10003; yes</dd>
+              {% elif value is sameas false %}<dd class="fail">&#10007; no</dd>
+              {% elif value is mapping or (value is iterable and value is not string) %}<dd>{{ value|tojson }}</dd>
+              {% else %}<dd>{{ value }}</dd>{% endif %}
               {% endfor %}
             </dl>
-            {% else %}
-            <span class="muted-note">no stats CSV</span>
+            {% elif c.success is none %}
+            <span class="muted-note">no stats</span>
             {% endif %}
           </td>
           {% endfor %}

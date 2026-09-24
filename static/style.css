@@ -341,3 +341,89 @@ code {
   padding: 7px 14px;
   font-size: 0.85rem;
 }
+
+/* --- CI layout: wider pages, case table, case metadata --- */
+
+main.wide {
+  max-width: none;
+}
+
+.filters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.filters #case-filter {
+  flex: 1;
+  min-width: 240px;
+}
+
+.case-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.88rem;
+}
+
+.case-table th {
+  text-align: left;
+  color: var(--muted);
+  font-weight: 600;
+  padding: 8px 10px;
+  border-bottom: 1px solid var(--border);
+  white-space: nowrap;
+}
+
+.case-table td {
+  padding: 7px 10px;
+  border-bottom: 1px solid var(--border);
+}
+
+.case-table tbody tr {
+  cursor: pointer;
+}
+
+.case-table tbody tr:hover {
+  background: var(--panel);
+}
+
+.case-table tbody tr.selected {
+  background: rgba(91, 140, 255, 0.16);
+}
+
+.case-table .nowrap {
+  white-space: nowrap;
+}
+
+.case-table .truncate {
+  max-width: 420px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.case-title {
+  font-size: 1rem;
+  margin-bottom: 6px;
+}
+
+.case-meta {
+  margin: 0;
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 2px 10px;
+  font-size: 0.8rem;
+  font-weight: normal;
+}
+
+.case-meta dt {
+  color: var(--muted);
+}
+
+.case-meta dd {
+  margin: 0;
+  word-break: break-all;
+}
+
+.stats dd.ok, .case-meta dd.ok { color: #6fd08c; }
+.stats dd.fail, .case-meta dd.fail { color: #ff9aa6; }
