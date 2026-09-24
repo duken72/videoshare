@@ -28,30 +28,52 @@
   </div>
 
   <div class="table-wrap">
-    <table class="compare-table">
+    <table class="compare-table labeled">
       <thead>
         <tr>
+          <th class="row-label"></th>
           {% for c in cases %}
-          <th>
-            <div class="case-title">{{ c.meta.scenario or c.case }}</div>
-            <dl class="case-meta">
-              {% if c.success is not none %}
-              <dt>Success</dt>
-              {% if c.success %}<dd class="ok">&#10003; yes</dd>{% else %}<dd class="fail">&#10007; no</dd>{% endif %}
-              {% endif %}
-              <dt>Time</dt><dd>{{ c.time or c.run }}</dd>
-              <dt>Build</dt><dd>{{ c.meta.build_id }}</dd>
-              <dt>Commit</dt><dd><code title="{{ c.meta.commit }}">{{ c.short_commit }}</code></dd>
-              <dt>Car type</dt><dd>{{ c.meta.car_type }}</dd>
-              <dt>Dataset</dt><dd>{{ c.meta.dataset }}</dd>
-            </dl>
-          </th>
+          <th><div class="case-title">{{ c.meta.scenario or c.case }}</div></th>
           {% endfor %}
         </tr>
       </thead>
       <tbody>
+        <tr class="meta-row">
+          <th class="row-label" scope="row">Time</th>
+          {% for c in cases %}
+          <td class="times">{% for label, t in c.times.items() %}<div>{{ t or c.run }} ({{ label }})</div>{% endfor %}</td>
+          {% endfor %}
+        </tr>
+        {% if has_success %}
+        <tr class="meta-row">
+          <th class="row-label" scope="row">Success</th>
+          {% for c in cases %}
+          {% if c.success is none %}<td></td>
+          {% elif c.success %}<td class="ok">&#10003; yes</td>
+          {% else %}<td class="fail">&#10007; no</td>{% endif %}
+          {% endfor %}
+        </tr>
+        {% endif %}
+        <tr class="meta-row">
+          <th class="row-label" scope="row">Build</th>
+          {% for c in cases %}<td>{{ c.meta.build_id }}</td>{% endfor %}
+        </tr>
+        <tr class="meta-row">
+          <th class="row-label" scope="row">Commit</th>
+          {% for c in cases %}<td><code title="{{ c.meta.commit }}">{{ c.short_commit }}</code></td>{% endfor %}
+        </tr>
+        <tr class="meta-row">
+          <th class="row-label" scope="row">Car type</th>
+          {% for c in cases %}<td>{{ c.meta.car_type }}</td>{% endfor %}
+        </tr>
+        <tr class="meta-row last">
+          <th class="row-label" scope="row">Dataset</th>
+          {% for c in cases %}<td>{{ c.meta.dataset }}</td>{% endfor %}
+        </tr>
+
         {% for i in max_videos %}
-        <tr>
+        <tr class="video-row">
+          <th class="row-label" scope="row">Video {{ i + 1 }}</th>
           {% for c in cases %}
           <td>
             {% if i < c.videos|length %}
@@ -62,38 +84,38 @@
               </video>
               <div class="caption">{{ c.videos[i] }}</div>
             </div>
+            {% elif i == 0 %}
+            <span class="muted-note">no videos</span>
             {% endif %}
           </td>
           {% endfor %}
         </tr>
-        {% endfor %}
-        {% if not max_videos %}
-        <tr>
+        {% else %}
+        <tr class="video-row">
+          <th class="row-label" scope="row">Videos</th>
           {% for c in cases %}<td><span class="muted-note">no videos</span></td>{% endfor %}
         </tr>
-        {% endif %}
-        <tr class="stats-row">
+        {% endfor %}
+
+        {% for key in stat_keys %}
+        <tr class="stat-row{{ ' first' if loop.first }}">
+          <th class="row-label" scope="row">{{ key }}</th>
           {% for c in cases %}
-          <td>
-            {% if not c.videos and max_videos %}
-            <p class="muted-note">no videos</p>
-            {% endif %}
-            {% if c.stats %}
-            <dl class="stats">
-              {% for label, value in c.stats %}
-              <dt>{{ label }}</dt>
-              {% if value is sameas true %}<dd class="ok">&#10003; yes</dd>
-              {% elif value is sameas false %}<dd class="fail">&#10007; no</dd>
-              {% elif value is mapping or (value is iterable and value is not string) %}<dd>{{ value|tojson }}</dd>
-              {% else %}<dd>{{ value }}</dd>{% endif %}
-              {% endfor %}
-            </dl>
-            {% elif c.success is none %}
-            <span class="muted-note">no stats</span>
-            {% endif %}
-          </td>
+          {% if key not in c.stats_by_key %}<td></td>
+          {% else %}{% set value = c.stats_by_key[key] %}
+          {% if value is sameas true %}<td class="ok">&#10003; yes</td>
+          {% elif value is sameas false %}<td class="fail">&#10007; no</td>
+          {% elif value is mapping or (value is iterable and value is not string) %}<td>{{ value|tojson }}</td>
+          {% else %}<td>{{ value }}</td>{% endif %}
+          {% endif %}
           {% endfor %}
         </tr>
+        {% else %}
+        <tr class="stat-row first">
+          <th class="row-label" scope="row">Stats</th>
+          {% for c in cases %}<td><span class="muted-note">no stats</span></td>{% endfor %}
+        </tr>
+        {% endfor %}
       </tbody>
     </table>
   </div>

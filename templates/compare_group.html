@@ -1,0 +1,120 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Comparing {{ groups|length }} {{ key_label|lower }}{{ 's' if groups|length != 1 else '' }}</title>
+<link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+<header class="header-row">
+  <div>
+    <h1>Comparing {{ groups|length }} {{ key_label|lower }}{{ 's' if groups|length != 1 else '' }}</h1>
+    <p><a href="{{ url_for('index') }}#{{ key }}" style="color: var(--accent); text-decoration: none;">&larr; back to picker</a></p>
+  </div>
+  <form class="logout-form" method="post" action="{{ url_for('logout') }}">
+    <button type="submit" class="secondary">Log out</button>
+  </form>
+</header>
+<main class="wide">
+  <div class="compare-toolbar">
+    <div class="share-box">
+      <input type="text" id="share-url" value="{{ share_url }}" readonly>
+      <button id="copy-btn" class="secondary">Copy link</button>
+    </div>
+  </div>
+
+  <div class="table-wrap">
+    <table class="compare-table labeled">
+      <thead>
+        <tr>
+          <th class="row-label case-label"></th>
+          {% for g in groups %}
+          <th><div class="case-title">{{ key_label }} {% if key == 'commit' %}<code title="{{ g.value }}">{{ g.label }}</code>{% else %}{{ g.label }}{% endif %}</div></th>
+          {% endfor %}
+        </tr>
+      </thead>
+      <tbody>
+        <tr class="meta-row">
+          <th class="row-label" scope="row">Successful runs</th>
+          {% for g in groups %}
+          {% set s = g.summary %}
+          <td>
+            <div class="group-summary {{ 'ok' if s.ok == s.total else 'fail' }}">
+              {{ s.ok }} / {{ s.total }}{% if s.unknown %} <small>{{ s.unknown }} unknown</small>{% endif %}
+            </div>
+          </td>
+          {% endfor %}
+        </tr>
+        <tr class="meta-row">
+          {% if key == 'build_id' %}
+          <th class="row-label" scope="row">Commits</th>
+          {% for g in groups %}<td>{% for c in g.commits %}<code>{{ c }}</code> {% endfor %}</td>{% endfor %}
+          {% else %}
+          <th class="row-label" scope="row">Builds</th>
+          {% for g in groups %}<td>{{ g.builds|join(', ') }}</td>{% endfor %}
+          {% endif %}
+        </tr>
+        <tr class="meta-row">
+          <th class="row-label" scope="row">CI runs</th>
+          {% for g in groups %}<td>{{ g.runs|length }}</td>{% endfor %}
+        </tr>
+        <tr class="meta-row">
+          <th class="row-label" scope="row">Latest</th>
+          {% for g in groups %}
+          <td class="times">{% for label, t in g.times.items() %}<div>{{ t }} ({{ label }})</div>{% endfor %}</td>
+          {% endfor %}
+        </tr>
+        {% for row in rows %}
+        <tr class="group-row">
+          <th class="row-label case-label" scope="row">
+            {{ row.meta.dataset or row.name }}
+            <span class="muted-note">{{ row.meta.scenario }} · {{ row.meta.car_type }}</span>
+            <a class="muted-note" href="{{ url_for('compare', f=row.ids) }}" style="color: var(--accent);">compare these {{ row.ids|length }} &rarr;</a>
+          </th>
+          {% for cell in row.cells %}
+          <td>
+            {% if cell %}
+            <div class="group-cell">
+              <ul>
+                {% for c in cell %}
+                <li>
+                  {% if c.success is sameas true %}<span class="ok" title="success">&#10003;</span>
+                  {% elif c.success is sameas false %}<span class="fail" title="failed">&#10007;</span>
+                  {% else %}<span class="muted-note" title="unknown">?</span>{% endif %}
+                  <a href="{{ url_for('compare', f=c.id) }}" title="{{ c.id }}">{{ c.times[timezones[0][0]] or c.run }} ({{ timezones[0][0] }})</a>
+                  <span class="muted-note">{% if key == 'build_id' %}{{ c.short_commit }}{% else %}{{ c.meta.build_id }}{% endif %} · {{ c.videos|length }} video{{ 's' if c.videos|length != 1 else '' }}</span>
+                </li>
+                {% endfor %}
+              </ul>
+            </div>
+            {% else %}
+            <span class="muted-note">not run</span>
+            {% endif %}
+          </td>
+          {% endfor %}
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</main>
+<div class="toast" id="toast">Link copied</div>
+
+<script>
+  const copyBtn = document.getElementById('copy-btn');
+  const toast = document.getElementById('toast');
+  copyBtn.addEventListener('click', async () => {
+    const input = document.getElementById('share-url');
+    try {
+      await navigator.clipboard.writeText(input.value);
+    } catch (e) {
+      input.select();
+      document.execCommand('copy');
+    }
+    toast.classList.add('show');
+    setTimeout(() => toast.classList.remove('show'), 1400);
+  });
+</script>
+</body>
+</html>

@@ -44,7 +44,7 @@ main {
 
 /* --- Picker page --- */
 
-form#picker {
+form.picker {
   display: flex;
   flex-direction: column;
   gap: 10px;
@@ -118,6 +118,8 @@ button.secondary, .btn.secondary {
 }
 
 button.secondary:hover { border-color: var(--accent); }
+
+button:disabled, button:disabled:hover { opacity: 0.4; cursor: default; border-color: var(--border); }
 
 .empty-state {
   color: var(--muted);
@@ -354,6 +356,10 @@ main.wide {
   gap: 8px;
 }
 
+.picker-toolbar {
+  margin: 12px 0;
+}
+
 .filters #case-filter {
   flex: 1;
   min-width: 240px;
@@ -425,5 +431,164 @@ main.wide {
   word-break: break-all;
 }
 
+/* Same-width digits so the UTC/DE/VN lines line up. */
+.case-meta dd.times {
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
 .stats dd.ok, .case-meta dd.ok { color: #6fd08c; }
 .stats dd.fail, .case-meta dd.fail { color: #ff9aa6; }
+
+/* --- Picker tabs: test cases / builds / commits --- */
+
+.tabs {
+  display: flex;
+  gap: 4px;
+  margin-bottom: 14px;
+  border-bottom: 1px solid var(--border);
+}
+
+.tabs .tab {
+  background: transparent;
+  color: var(--muted);
+  border-radius: 7px 7px 0 0;
+  border-bottom: 2px solid transparent;
+  padding: 8px 16px;
+}
+
+.tabs .tab:hover { color: var(--text); background: transparent; }
+
+.tabs .tab.active {
+  color: var(--text);
+  border-bottom-color: var(--accent);
+}
+
+.tab-panel[hidden] { display: none; }
+
+.picker .count {
+  color: var(--muted);
+  font-size: 0.88rem;
+}
+
+.case-table td.ok, .group-cell .ok, .group-summary.ok { color: #6fd08c; }
+.case-table td.fail, .group-cell .fail, .group-summary.fail { color: #ff9aa6; }
+
+/* --- Group compare page: one column per build/commit, one row per test case --- */
+
+.group-summary {
+  font-size: 1.5rem;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  margin: 2px 0 8px;
+}
+
+.group-summary small {
+  font-size: 0.8rem;
+  font-weight: normal;
+  color: var(--muted);
+}
+
+.compare-table th.case-label, .compare-table td.case-label {
+  min-width: 220px;
+  width: 260px;
+}
+
+.compare-table td.case-label {
+  font-size: 0.85rem;
+  word-break: break-all;
+}
+
+.case-label .muted-note {
+  display: block;
+}
+
+.group-cell {
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 10px 14px;
+  font-size: 0.85rem;
+}
+
+.group-cell ul {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.group-cell li {
+  display: flex;
+  gap: 8px;
+  font-variant-numeric: tabular-nums;
+}
+
+.group-cell a {
+  color: var(--accent);
+  text-decoration: none;
+}
+
+.group-cell a:hover { text-decoration: underline; }
+
+/* --- Compare page: row labels once on the left, one column per case --- */
+
+.compare-table.labeled {
+  border-spacing: 16px 0;
+}
+
+.compare-table.labeled th.row-label {
+  position: sticky;
+  left: 0;
+  z-index: 1;
+  background: var(--bg);
+  min-width: 0;
+  width: 150px;
+  padding: 6px 8px 6px 0;
+  color: var(--muted);
+  font-size: 0.85rem;
+  font-weight: normal;
+  vertical-align: top;
+  word-break: break-word;
+}
+
+.compare-table.labeled .meta-row td,
+.compare-table.labeled .stat-row td {
+  padding: 6px 4px;
+  font-size: 0.85rem;
+  border-bottom: 1px solid var(--border);
+  word-break: break-all;
+}
+
+/* Same-width digits so the UTC/DE/VN lines line up. */
+.compare-table.labeled td.times {
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.compare-table.labeled .video-row > * {
+  padding-top: 16px;
+}
+
+.compare-table.labeled .stat-row.first > * {
+  padding-top: 22px;
+}
+
+.compare-table.labeled td.ok { color: #6fd08c; }
+.compare-table.labeled td.fail { color: #ff9aa6; }
+
+/* Group compare page: the label column also holds the case names. */
+.compare-table.labeled th.row-label.case-label {
+  min-width: 220px;
+  width: 260px;
+  color: var(--text);
+  word-break: break-all;
+}
+
+.compare-table.labeled .group-row > * {
+  padding-top: 12px;
+}
+
+.compare-table.labeled .meta-row td .group-summary {
+  font-size: 1.3rem;
+  margin: 0;
+}

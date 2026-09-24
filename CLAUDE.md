@@ -43,10 +43,13 @@ as `"<run>/<case>"`. Scenario and dataset names contain underscores, so
 the metadata (`METADATA_KEYS`: run_timestamp, build_id, commit, scenario,
 car_type, dataset) comes from `stats.json`. `parse_run_name()` is only a
 fallback for the run-level fields when `stats.json` is missing.
-`case_info()` builds the dict the templates use: id, meta, formatted time,
-short commit, videos, and `stats`, which holds the `stats.json` keys that
-aren't metadata. `container_success` is pulled out as `success` and shown as the
-first row of the compare column header. A case is listed (`is_case()`)
+`case_info()` builds the dict the templates use: id, meta, `times` (the
+UTC run timestamp, plus it converted to each zone in `TIMEZONES`: DE =
+Europe/Berlin, VN = Asia/Ho_Chi_Minh), short commit, videos, and `stats`,
+which holds the `stats.json` keys that aren't metadata or in
+`HIDDEN_STATS_KEYS`. On the compare page the first metadata row is Time,
+listing the UTC, DE and VN times on aligned lines. `container_success`
+is pulled out as `success` and shown right after it. A case is listed (`is_case()`)
 if it has a video *or* a `stats.json`, so failed runs with no video still
 show up.
 
@@ -64,19 +67,37 @@ open redirect. Routes:
 - `POST /logout` (`logout`) — clears the session.
 - `GET /` (`index`) — lists every case via `list_cases()`, newest run
   first, and renders the picker (`templates/index.html`). The picker is a
-  table with one checkbox row per case and columns for time, build,
-  commit, scenario, car type, dataset and video count. Above it are a free
+  table with one checkbox row per case and columns for time (DE), time (VN),
+  build, commit, scenario, car type, dataset and video count. Above it are a free
   text filter and dropdown filters for build, scenario, car type and
-  dataset. All filtering happens client-side by hiding rows.
+  dataset. All filtering happens client-side by hiding rows. Tabs above
+  the filters switch to a **Builds** or **Commits** table (one checkbox row
+  per `group_cases()` group, with its CI-run count and successful/total
+  runs); those submit to `/compare/group`. The dropdowns only apply to the
+  case table; the text filter applies to all three.
 - `GET /compare?f=<run>/<case>&f=...` (`compare`) — takes repeated `f`
   query params and silently drops any that don't resolve to a real case
   (per entry, not a hard 404). Renders `templates/compare.html` as a table
-  with one column per case. The header shows the case's metadata, then
-  there is one row per video index. Videos align across cases by
+  with a sticky label column on the left (row names appear only once) and
+  one column per case. The header is just the case title. Below it are
+  one row per metadata field, then one row per video index, then one row
+  per stats key (the union of keys across cases, in first-seen order;
+  cases missing a key get a blank cell). Videos align across cases by
   sorted-filename position, not by name, and cases with fewer videos get
-  blank cells. A final row shows the stats. The full request URL is the
+  blank cells. The full request URL is the
   shareable link — state lives entirely in the query string, not a
   database.
+- `GET /compare/group?by=build_id|commit&g=<value>&g=...` (`compare_group`)
+  — compares whole builds or commits (`GROUP_KEYS`), each spanning many
+  cases/runs. Renders `templates/compare_group.html` with the same
+  left-hand label column as `/compare` and one column per group: rows
+  for "successful / total runs" (`summarize()`: a run is one
+  case, success is `container_success`; missing counts as unknown, not
+  successful), commits/builds, CI runs and latest time, then one row per
+  case folder name so the same test case
+  lines up across groups. Cells list that group's runs of the case with a
+  link to `/compare`; each row links to `/compare` with all its runs.
+  Unknown `g` values are skipped. No videos are embedded on this page.
 - `GET /media/<run>/<case>/<filename>` (`media`) — streams the actual video via
   `send_from_directory(..., conditional=True)`, which is what makes HTTP
   Range requests (scrubbing/seeking) work.
@@ -108,3 +129,15 @@ Meant to run behind gunicorn + systemd (`videoshare.service` is the unit
 template) with nginx optionally reverse-proxying for TLS/port 80. Gunicorn
 binds to `127.0.0.1` only; nginx is what exposes it publicly. See
 `README.md` for the full nginx config and systemd setup.
+
+## Git workflow
+
+Work directly on the current branch in the main checkout — no need to
+create a worktree or a new branch. Do **not** commit or push unless
+explicitly asked to; leave changes uncommitted for review.
+
+Multiple sessions/conversations may be working on the same branch and
+checkout at the same time. Expect files to change underneath you: re-read
+a file before editing it, treat unfamiliar uncommitted changes as another
+session's work (don't revert or overwrite them), and when asked to commit,
+stage only the changes you made.

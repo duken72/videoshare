@@ -18,24 +18,36 @@
 </header>
 <main class="wide">
   {% if cases %}
-  <form id="picker" action="{{ url_for('compare') }}" method="get">
-    <div class="filters">
-      <input type="text" id="case-filter" class="folder-filter" placeholder="Filter by anything (commit, dataset, …)" autocomplete="off">
-      {% for key, label in [('build_id', 'Build'), ('scenario', 'Scenario'), ('car_type', 'Car type'), ('dataset', 'Dataset')] %}
-      <select class="folder-filter column-filter" data-key="{{ key }}">
-        <option value="">All {{ label|lower }}s</option>
-        {% for v in cases|map(attribute='meta.' ~ key)|reject('equalto', '')|unique|sort %}
-        <option value="{{ v }}">{{ v }}</option>
-        {% endfor %}
-      </select>
+  <nav class="tabs">
+    <button type="button" class="tab" data-tab="cases">Test cases</button>
+    {% for key, label in group_keys.items() %}
+    <button type="button" class="tab" data-tab="{{ key }}">{{ label }}s</button>
+    {% endfor %}
+  </nav>
+  <div class="filters">
+    <input type="text" id="case-filter" class="folder-filter" placeholder="Filter by anything (commit, dataset, …)" autocomplete="off">
+    {% for key, label in [('build_id', 'Build'), ('scenario', 'Scenario'), ('car_type', 'Car type'), ('dataset', 'Dataset')] %}
+    <select class="folder-filter column-filter" data-key="{{ key }}">
+      <option value="">All {{ label|lower }}s</option>
+      {% for v in cases|map(attribute='meta.' ~ key)|reject('equalto', '')|unique|sort %}
+      <option value="{{ v }}">{{ v }}</option>
       {% endfor %}
+    </select>
+    {% endfor %}
+  </div>
+
+  <form class="picker tab-panel" data-tab="cases" action="{{ url_for('compare') }}" method="get">
+    <div class="toolbar picker-toolbar">
+      <button type="submit">Compare selected</button>
+      <button type="button" class="secondary clear-selection">Clear selection</button>
+      <span class="count"></span>
     </div>
     <div class="table-wrap">
       <table class="case-table">
         <thead>
           <tr>
-            <th><input type="checkbox" id="select-visible" title="Select all shown"></th>
-            <th>Time (UTC)</th>
+            <th><input type="checkbox" class="select-visible" title="Select all shown"></th>
+            {% for label, _ in timezones %}<th>Time ({{ label }})</th>{% endfor %}
             <th>Build</th>
             <th>Commit</th>
             <th>Scenario</th>
@@ -50,7 +62,7 @@
               data-car_type="{{ c.meta.car_type }}" data-dataset="{{ c.meta.dataset }}"
               data-search="{{ (c.id ~ ' ' ~ c.meta.values()|join(' '))|lower }}">
             <td><input type="checkbox" name="f" value="{{ c.id }}"></td>
-            <td class="nowrap">{{ c.time or c.run }}</td>
+            {% for label, _ in timezones %}<td class="nowrap">{{ c.times[label] or c.run }}</td>{% endfor %}
             <td>{{ c.meta.build_id }}</td>
             <td><code title="{{ c.meta.commit }}">{{ c.short_commit }}</code></td>
             <td>{{ c.meta.scenario or c.case }}</td>
@@ -62,11 +74,45 @@
         </tbody>
       </table>
     </div>
-    <div class="toolbar">
-      <button type="submit">Compare selected</button>
-      <span id="count" style="color: var(--muted); font-size: 0.88rem;"></span>
+  </form>
+
+  {% for key, label in group_keys.items() %}
+  <form class="picker tab-panel" data-tab="{{ key }}" action="{{ url_for('compare_group') }}" method="get" hidden>
+    <input type="hidden" name="by" value="{{ key }}">
+    <div class="toolbar picker-toolbar">
+      <button type="submit">Compare selected {{ label|lower }}s</button>
+      <button type="button" class="secondary clear-selection">Clear selection</button>
+      <span class="count"></span>
+    </div>
+    <div class="table-wrap">
+      <table class="case-table">
+        <thead>
+          <tr>
+            <th><input type="checkbox" class="select-visible" title="Select all shown"></th>
+            <th>{{ label }}</th>
+            <th>{{ 'Commits' if key == 'build_id' else 'Builds' }}</th>
+            {% for tz, _ in timezones %}<th>Latest ({{ tz }})</th>{% endfor %}
+            <th>CI runs</th>
+            <th>Successful / total runs</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for g in groups[key] %}
+          <tr data-search="{{ ([g.value] + g.builds + g.commits + g.runs + g.cases|map(attribute='case')|list)|join(' ')|lower }}">
+            <td><input type="checkbox" name="g" value="{{ g.value }}"></td>
+            <td>{% if key == 'commit' %}<code title="{{ g.value }}">{{ g.label }}</code>{% else %}{{ g.label }}{% endif %}</td>
+            <td>{% if key == 'build_id' %}{% for c in g.commits %}<code>{{ c }}</code> {% endfor %}{% else %}{{ g.builds|join(', ') }}{% endif %}</td>
+            {% for tz, _ in timezones %}<td class="nowrap">{{ g.times[tz] }}</td>{% endfor %}
+            <td>{{ g.runs|length }}</td>
+            {% set s = g.summary %}
+            <td class="nowrap {{ 'ok' if s.ok == s.total else 'fail' }}">{{ s.ok }} / {{ s.total }}{% if s.unknown %} <span class="muted-note">({{ s.unknown }} unknown)</span>{% endif %}</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
     </div>
   </form>
+  {% endfor %}
   {% else %}
   <div class="empty-state">
     No test cases found yet. Expected layout inside the configured <code>VIDEO_DIR</code>:
@@ -77,67 +123,105 @@
   {% endif %}
 </main>
 <script>
-  const rows = Array.from(document.querySelectorAll('.case-table tbody tr'));
   const textFilter = document.getElementById('case-filter');
   const columnFilters = Array.from(document.querySelectorAll('.column-filter'));
-  const selectVisible = document.getElementById('select-visible');
-  const count = document.getElementById('count');
-  const box = row => row.querySelector('input[name="f"]');
+  const tabs = Array.from(document.querySelectorAll('.tab'));
+  const panels = Array.from(document.querySelectorAll('.tab-panel'));
 
-  function updateCount() {
-    const n = rows.filter(r => box(r).checked).length;
-    count.textContent = n ? `${n} selected` : '';
-  }
+  // Each tab is its own form: a table of checkbox rows plus a count and "select all shown".
+  const pickers = panels.map(panel => {
+    const rows = Array.from(panel.querySelectorAll('tbody tr'));
+    const selectVisible = panel.querySelector('.select-visible');
+    const count = panel.querySelector('.count');
+    const clearSelection = panel.querySelector('.clear-selection');
+    const box = row => row.querySelector('input[type="checkbox"]');
+
+    function updateCount() {
+      const n = rows.filter(r => box(r).checked).length;
+      count.textContent = n ? `${n} selected` : '';
+      clearSelection.disabled = n === 0;
+    }
+
+    // Clicking anywhere on a row toggles its checkbox. Shift+click applies the
+    // clicked row's new state to every visible row between it and the last
+    // clicked row.
+    let lastClicked = null;
+    rows.forEach(row => row.addEventListener('click', e => {
+      if (e.target.tagName !== 'INPUT') box(row).checked = !box(row).checked;
+      const state = box(row).checked;
+      let range = [row];
+      if (e.shiftKey && lastClicked && lastClicked !== row) {
+        const [a, b] = [rows.indexOf(lastClicked), rows.indexOf(row)].sort((x, y) => x - y);
+        range = rows.slice(a, b + 1).filter(r => !r.hidden);
+      }
+      range.forEach(r => {
+        box(r).checked = state;
+        r.classList.toggle('selected', state);
+      });
+      lastClicked = row;
+      updateCount();
+    }));
+    // Keep shift+click from highlighting text across the rows.
+    rows.forEach(row => row.addEventListener('mousedown', e => {
+      if (e.shiftKey) e.preventDefault();
+    }));
+
+    selectVisible.addEventListener('change', () => {
+      rows.filter(r => !r.hidden).forEach(r => {
+        box(r).checked = selectVisible.checked;
+        r.classList.toggle('selected', selectVisible.checked);
+      });
+      updateCount();
+    });
+
+    // Clears every row in this tab, including ones hidden by the filters.
+    clearSelection.addEventListener('click', () => {
+      rows.forEach(r => {
+        box(r).checked = false;
+        r.classList.remove('selected');
+      });
+      selectVisible.checked = false;
+      lastClicked = null;
+      updateCount();
+    });
+
+    // Restore state after browser back-navigation (checkboxes may be kept).
+    rows.forEach(r => r.classList.toggle('selected', box(r).checked));
+    updateCount();
+    return { rows, selectVisible };
+  });
 
   function applyFilters() {
     const q = textFilter.value.trim().toLowerCase();
-    rows.forEach(row => {
-      const matches = (q === '' || row.dataset.search.includes(q)) &&
-        columnFilters.every(s => s.value === '' || row.dataset[s.dataset.key] === s.value);
-      row.hidden = !matches;
+    pickers.forEach(({ rows, selectVisible }) => {
+      rows.forEach(row => {
+        // Group rows have no per-column data, so the dropdowns only affect case rows.
+        const matches = (q === '' || row.dataset.search.includes(q)) &&
+          columnFilters.every(s => s.value === '' || !(s.dataset.key in row.dataset) ||
+                                   row.dataset[s.dataset.key] === s.value);
+        row.hidden = !matches;
+      });
+      selectVisible.checked = false;
     });
-    selectVisible.checked = false;
   }
 
-  // Clicking anywhere on a row toggles its checkbox. Shift+click applies the
-  // clicked row's new state to every visible row between it and the last
-  // clicked row.
-  let lastClicked = null;
-  rows.forEach(row => row.addEventListener('click', e => {
-    if (e.target.tagName !== 'INPUT') box(row).checked = !box(row).checked;
-    const state = box(row).checked;
-    let range = [row];
-    if (e.shiftKey && lastClicked && lastClicked !== row) {
-      const [a, b] = [rows.indexOf(lastClicked), rows.indexOf(row)].sort((x, y) => x - y);
-      range = rows.slice(a, b + 1).filter(r => !r.hidden);
-    }
-    range.forEach(r => {
-      box(r).checked = state;
-      r.classList.toggle('selected', state);
-    });
-    lastClicked = row;
-    updateCount();
-  }));
-  // Keep shift+click from highlighting text across the rows.
-  rows.forEach(row => row.addEventListener('mousedown', e => {
-    if (e.shiftKey) e.preventDefault();
-  }));
+  function showTab(name) {
+    if (!tabs.some(t => t.dataset.tab === name)) name = 'cases';
+    tabs.forEach(t => t.classList.toggle('active', t.dataset.tab === name));
+    panels.forEach(p => { p.hidden = p.dataset.tab !== name; });
+    columnFilters.forEach(s => { s.hidden = name !== 'cases'; });
+  }
 
-  selectVisible.addEventListener('change', () => {
-    rows.filter(r => !r.hidden).forEach(r => {
-      box(r).checked = selectVisible.checked;
-      r.classList.toggle('selected', selectVisible.checked);
-    });
-    updateCount();
-  });
+  tabs.forEach(t => t.addEventListener('click', () => {
+    history.replaceState(null, '', '#' + t.dataset.tab);
+    showTab(t.dataset.tab);
+  }));
 
   textFilter.addEventListener('input', applyFilters);
   columnFilters.forEach(s => s.addEventListener('change', applyFilters));
 
-  // Restore state after browser back-navigation (checkboxes may be kept).
-  rows.forEach(r => r.classList.toggle('selected', box(r).checked));
+  showTab(location.hash.slice(1));
   applyFilters();
-  updateCount();
 </script>
 </body>
 </html>

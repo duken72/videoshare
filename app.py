@@ -30,8 +30,9 @@ Run in production with gunicorn (see README.md):
 import functools
 import json
 import os
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
+from zoneinfo import ZoneInfo
 
 from flask import (
     Flask,
@@ -83,6 +84,9 @@ def list_videos_in(folder):
 STATS_FILE = "stats.json"
 # stats.json keys shown as the case's header rather than in its stats list.
 METADATA_KEYS = ("run_timestamp", "build_id", "commit", "scenario", "car_type", "dataset")
+# stats.json keys left out of the stats list: shown in the header instead, or
+# redundant with the times computed from run_timestamp.
+HIDDEN_STATS_KEYS = ("container_success", "run_timestamp_germany", "run_timestamp_vietnam")
 
 
 def read_stats(folder):
@@ -114,12 +118,22 @@ def parse_run_name(name):
     }
 
 
-def format_timestamp(ts):
-    """Render 20260923_122816Z as '2026-09-23 12:28:16 UTC' (or return ts as-is)."""
+# Local time zones the run timestamp is shown in, as (label, zone).
+TIMEZONES = (("DE", ZoneInfo("Europe/Berlin")), ("VN", ZoneInfo("Asia/Ho_Chi_Minh")))
+app.jinja_env.globals["timezones"] = TIMEZONES
+
+
+def format_times(ts):
+    """Render 20260923_122816Z as {'UTC': '2026-09-23 12:28:16', 'DE': '2026-09-23 14:28:16', ...}.
+
+    Keys are 'UTC' plus each TIMEZONES label. If ts doesn't parse, every key gets ts as-is.
+    """
+    zones = (("UTC", timezone.utc),) + TIMEZONES
     try:
-        return datetime.strptime(ts, "%Y%m%d_%H%M%SZ").strftime("%Y-%m-%d %H:%M:%S UTC")
+        utc = datetime.strptime(ts, "%Y%m%d_%H%M%SZ").replace(tzinfo=timezone.utc)
     except (TypeError, ValueError):
-        return ts or ""
+        return {label: ts or "" for label, _ in zones}
+    return {label: utc.astimezone(tz).strftime("%Y-%m-%d %H:%M:%S") for label, tz in zones}
 
 
 def case_info(run_path, case_path):
@@ -132,14 +146,14 @@ def case_info(run_path, case_path):
         "run": run_path.name,
         "case": case_path.name,
         "meta": meta,
-        "time": format_timestamp(meta["run_timestamp"]),
+        "times": format_times(meta["run_timestamp"]),
         "short_commit": meta["commit"][:9],
         "videos": list_videos_in(case_path),
         # True/False, or None if the case's stats.json doesn't say.
         "success": stats.get("container_success"),
         "stats": [
             (k, v) for k, v in stats.items()
-            if k not in METADATA_KEYS and k != "container_success"
+            if k not in METADATA_KEYS and k not in HIDDEN_STATS_KEYS
         ],
     }
 
@@ -162,6 +176,40 @@ def list_cases():
     cases.sort(key=lambda c: c["case"].lower())
     cases.sort(key=lambda c: (c["meta"]["run_timestamp"], c["run"]), reverse=True)
     return cases
+
+
+# Metadata keys cases can be grouped by for a group comparison, with their labels.
+GROUP_KEYS = {"build_id": "Build", "commit": "Commit"}
+
+
+def summarize(cases):
+    """Count how many of cases succeeded: {'ok': .., 'total': .., 'unknown': ..}."""
+    return {
+        "ok": sum(c["success"] is True for c in cases),
+        "total": len(cases),
+        "unknown": sum(c["success"] is None for c in cases),
+    }
+
+
+def group_cases(cases, key):
+    """Group cases (as returned by list_cases()) by meta[key], newest group first."""
+    groups = {}
+    for c in cases:
+        groups.setdefault(c["meta"][key], []).append(c)
+    return [
+        {
+            "value": value,
+            "label": (value[:9] if key == "commit" else value) or "(none)",
+            "cases": members,
+            "runs": sorted({c["run"] for c in members}, reverse=True),
+            "builds": sorted({c["meta"]["build_id"] for c in members}),
+            "commits": sorted({c["short_commit"] for c in members}),
+            # members keep list_cases() order, so the first one is the newest.
+            "times": members[0]["times"],
+            "summary": summarize(members),
+        }
+        for value, members in groups.items()
+    ]
 
 
 def safe_child(parent, name, want_dir):
@@ -209,7 +257,10 @@ def logout():
 @login_required
 def index():
     cases = list_cases()
-    return render_template("index.html", cases=cases, video_dir=str(VIDEO_DIR))
+    groups = {key: group_cases(cases, key) for key in GROUP_KEYS}
+    return render_template(
+        "index.html", cases=cases, groups=groups, group_keys=GROUP_KEYS, video_dir=str(VIDEO_DIR)
+    )
 
 
 @app.route("/compare")
@@ -231,9 +282,46 @@ def compare():
         abort(404, description="No valid test cases selected.")
 
     max_videos = max(len(c["videos"]) for c in cases)
+    # One stats row per key, in first-seen order across cases, so the labels
+    # can be shown once on the left; cases missing a key get a blank cell.
+    stat_keys = list(dict.fromkeys(k for c in cases for k, _ in c["stats"]))
+    for c in cases:
+        c["stats_by_key"] = dict(c["stats"])
     share_url = request.url
     return render_template(
-        "compare.html", cases=cases, max_videos=range(max_videos), share_url=share_url
+        "compare.html",
+        cases=cases,
+        max_videos=range(max_videos),
+        stat_keys=stat_keys,
+        has_success=any(c["success"] is not None for c in cases),
+        share_url=share_url,
+    )
+
+
+@app.route("/compare/group")
+@login_required
+def compare_group():
+    key = request.args.get("by", "")
+    if key not in GROUP_KEYS:
+        abort(404, description="Unknown grouping.")
+    all_groups = {g["value"]: g for g in group_cases(list_cases(), key)}
+    # Unknown values are skipped, like bad entries on /compare.
+    groups = [all_groups[v] for v in dict.fromkeys(request.args.getlist("g")) if v in all_groups]
+    if not groups:
+        abort(404, description=f"No valid {GROUP_KEYS[key].lower()}s selected.")
+
+    # One row per case folder name (<scenario>_<car type>_<dataset>), so the
+    # same test case lines up across groups; each cell lists that group's runs of it.
+    names = sorted({c["case"] for g in groups for c in g["cases"]}, key=str.lower)
+    rows = []
+    for name in names:
+        cells = [[c for c in g["cases"] if c["case"] == name] for g in groups]
+        members = [c for cell in cells for c in cell]
+        rows.append({"name": name, "meta": members[0]["meta"], "cells": cells,
+                     "ids": [c["id"] for c in members]})
+    return render_template(
+        "compare_group.html", key=key, key_label=GROUP_KEYS[key],
+        groups=groups, rows=rows, share_url=request.url,
     )
 
 
